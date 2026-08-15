@@ -1,4 +1,4 @@
-import { putMany, setMeta } from "./db";
+import { listTransactions, putMany, setMeta } from "./db";
 import { api } from "./api";
 import { checkSession } from "./auth";
 import { Transaction } from "./types";
@@ -18,7 +18,15 @@ export async function syncData() {
     json<Transaction[]>("/api/transactions?limit=100"),
     json<import("./types").BalanceHistory[]>("/api/balance-history"),
   ]);
-  if (transactions) await putMany("transactions", transactions.map((item) => ({ ...item, sync_status: "synced" })));
+  if (transactions) {
+    const localTransactions = await listTransactions();
+    const pendingIds = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.id));
+    const pendingRefs = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.unique_ref));
+    const serverTransactions = transactions
+      .filter((item) => !pendingIds.has(item.id) && !pendingRefs.has(item.unique_ref))
+      .map((item) => ({ ...item, sync_status: "synced" as const }));
+    await putMany("transactions", serverTransactions);
+  }
   if (history) await putMany("balance_history", history);
   await setMeta("last_synced_at", new Date().toISOString());
 }

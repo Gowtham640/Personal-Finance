@@ -79,7 +79,7 @@ export default function Home() {
       <button aria-label="Add transaction" onClick={() => setSheet("add")} className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-[0_0_24px_rgba(255,255,255,.1)] transition-transform duration-150 active:scale-[0.96]"><Plus size={22} /></button>
     </div>
     <BottomNav />
-    {sheet === "add" && <AddTransactionSheet sources={sources} month={month} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onClose={() => setSheet(null)} />}
+    {sheet === "add" && <AddTransactionSheet sources={sources} month={month} transactions={transactions} categoryMappings={categoryMappings} userId={user?.id ?? ""} onLearnCategory={learnCategory} onClose={() => setSheet(null)} />}
     {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
   </main>;
