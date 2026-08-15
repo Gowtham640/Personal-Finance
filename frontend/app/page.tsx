@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RefreshCw } from "lucide-react";
+import { Ban, GitBranch, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "../components/BottomNav";
 import { DivideTransactionSheet } from "../components/DivideTransactionSheet";
@@ -35,9 +35,10 @@ export default function Home() {
     });
   }, []);
   const monthTransactions = useMemo(() => transactions.filter((item) => { const date = new Date(item.transaction_date); return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).sort((a, b) => b.transaction_date.localeCompare(a.transaction_date)), [transactions, month]);
+  const cashFlowMonthTransactions = useMemo(() => monthTransactions.filter((item) => !item.excludedFromCashFlow), [monthTransactions]);
   const grouped = monthTransactions.reduce<Record<string, Transaction[]>>((acc, item) => { const key = item.transaction_date.slice(0, 10); (acc[key] ??= []).push(item); return acc; }, {});
-  const incoming = monthTransactions.filter((item) => item.type === "credit").reduce((sum, item) => sum + item.amount, 0);
-  const outgoing = monthTransactions.filter((item) => item.type === "debit").reduce((sum, item) => sum + item.amount, 0);
+  const incoming = cashFlowMonthTransactions.filter((item) => item.type === "credit").reduce((sum, item) => sum + Number(item.amount), 0);
+  const outgoing = cashFlowMonthTransactions.filter((item) => item.type === "debit").reduce((sum, item) => sum + Number(item.amount), 0);
   const refreshLatestTransactions = async () => {
     setRefreshing(true);
     try {
@@ -106,6 +107,6 @@ export default function Home() {
     {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} type={selected.type} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
     {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
-    {longPressMenu && <div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void excludeFromCashFlow()} className="block w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">exclude from cash flow</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="block w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">divide transaction</button></div>}
+    {longPressMenu && <div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void excludeFromCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><Ban size={16} />Exclude from cash flow</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div>}
   </main>;
 }

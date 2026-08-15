@@ -77,7 +77,7 @@ export function AddTransactionSheet({
     ),
     [suggestedCategory, transactions, type],
   );
-  const effectiveCategory = categoryTouched ? category : suggestedCategory;
+  const effectiveCategory = categoryTouched ? category ?? "Other" : suggestedCategory ?? "Other";
   const append = (value: string) => setAmount((current) => `${current}${value}`);
   const save = async () => {
     const numeric = numericAmount;
@@ -99,7 +99,7 @@ export function AddTransactionSheet({
     }
     try {
       const now = new Date().toISOString();
-      const transaction: Transaction = { id: crypto.randomUUID(), user_id: source?.user_id ?? userId, unique_ref: `offline-${Date.now()}`, transaction_date: new Date(`${date}T12:00:00`).toISOString(), amount: numeric, type, merchant: merchant.trim(), category: effectiveCategory, description: null, balance_after: source ? source.balance + (type === "credit" ? numeric : -numeric) : null, source: source?.source_name ?? null, created_at: now, updated_at: now, sync_status: "pending" };
+      const transaction: Transaction = { id: crypto.randomUUID(), user_id: source?.user_id ?? userId, unique_ref: `offline-${Date.now()}`, transaction_date: new Date(`${date}T12:00:00`).toISOString(), amount: numeric, type, merchant: merchant.trim(), category: effectiveCategory, description: null, balance_after: source ? source.balance + (type === "credit" ? numeric : -numeric) : null, source: source?.source_name ?? null, excludedFromCashFlow: false, created_at: now, updated_at: now, sync_status: "pending" };
       await putTransaction(transaction);
       if (source) {
         await putSource({ ...source, balance: transaction.balance_after ?? source.balance, updated_at: now, sync_status: "pending" });
