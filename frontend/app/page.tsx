@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, GitBranch, Plus, RefreshCw } from "lucide-react";
+import { Ban, GitBranch, Plus, RefreshCw, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "../components/BottomNav";
 import { DivideTransactionSheet } from "../components/DivideTransactionSheet";
@@ -61,9 +61,9 @@ export default function Home() {
       setSheet(null);
     }
   };
-  const excludeFromCashFlow = async () => {
+  const toggleCashFlow = async () => {
     if (!longPressMenu) return;
-    await update({ ...longPressMenu.transaction, excludedFromCashFlow: true, sync_status: "pending", updated_at: new Date().toISOString() });
+    await update({ ...longPressMenu.transaction, excludedFromCashFlow: !longPressMenu.transaction.excludedFromCashFlow, sync_status: "pending", updated_at: new Date().toISOString() });
     setLongPressMenu(null);
   };
   const divideTransaction = async (amounts: number[]) => {
@@ -107,6 +107,6 @@ export default function Home() {
     {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} type={selected.type} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
     {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
-    {longPressMenu && <div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void excludeFromCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><Ban size={16} />Exclude from cash flow</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div>}
+    {longPressMenu && <><div className="fixed inset-0 z-[59]" onPointerDown={() => setLongPressMenu(null)} /><div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void toggleCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div></>}
   </main>;
 }

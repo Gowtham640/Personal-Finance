@@ -70,6 +70,11 @@ export async function listSources() {
   return db ? (await db).getAll("sources") : [];
 }
 
+export async function listBalanceHistory() {
+  const db = getDB();
+  return db ? (await db).getAll("balance_history") : [];
+}
+
 export async function putTransaction(transaction: Transaction) {
   const db = getDB();
   if (db) await (await db).put("transactions", transaction);
