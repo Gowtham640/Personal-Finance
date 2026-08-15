@@ -1,7 +1,8 @@
 import { DBSchema, IDBPDatabase, openDB } from "idb";
 import { BalanceHistory, Source, Transaction, User } from "./types";
+import { CategoryMapping } from "./merchant-intelligence";
 
-type MetaValue = string | User | null;
+type MetaValue = string | User | CategoryMapping | null;
 
 interface ExpenseDB extends DBSchema {
   transactions: {

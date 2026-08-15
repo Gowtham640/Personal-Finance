@@ -19,8 +19,12 @@ export const categories = [
   { name: "Lifestyle", icon: ShoppingBag },
   { name: "Health", icon: HeartPulse },
   { name: "Shopping", icon: ShoppingCart },
+  { name: "Grocery", icon: ShoppingCart },
   { name: "Bills", icon: Receipt },
+  { name: "Rent", icon: Receipt },
   { name: "Salary", icon: Wallet },
+  { name: "Income", icon: Wallet },
+  { name: "Misc", icon: MoreHorizontal },
   { name: "Other", icon: MoreHorizontal },
 ] as const;
 

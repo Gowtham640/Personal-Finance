@@ -7,7 +7,7 @@
   --glass-light: rgba(58, 58, 60, 0.7);
   --muted: #8e8e93;
   --green: #30d158;
-  --red: #ff453a;
+  --red: #d96b6b;
 }
 
 * {
@@ -17,10 +17,12 @@
 html,
 body {
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--background);
   color: #fff;
   font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Inter", sans-serif;
