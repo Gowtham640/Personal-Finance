@@ -11,7 +11,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-export const categories = [
+export const debitCategories = [
   { name: "Food", icon: Utensils },
   { name: "Entertainment", icon: Clapperboard },
   { name: "Petrol", icon: Fuel },
@@ -22,10 +22,23 @@ export const categories = [
   { name: "Grocery", icon: ShoppingCart },
   { name: "Bills", icon: Receipt },
   { name: "Rent", icon: Receipt },
-  { name: "Salary", icon: Wallet },
-  { name: "Income", icon: Wallet },
+  { name: "Bills/Rent", icon: Receipt },
   { name: "Misc", icon: MoreHorizontal },
   { name: "Other", icon: MoreHorizontal },
+] as const;
+
+export const creditCategories = [
+  { name: "Income", icon: Wallet },
+  { name: "Salary", icon: Wallet },
+  { name: "Refund", icon: Wallet },
+  { name: "Transfer", icon: Wallet },
+  { name: "Interest", icon: Wallet },
+  { name: "Other", icon: MoreHorizontal },
+] as const;
+
+export const categories = [
+  ...debitCategories,
+  ...creditCategories.filter((credit) => !debitCategories.some((debit) => debit.name === credit.name)),
 ] as const;
 
 export function categoryIcon(category: string | null) {

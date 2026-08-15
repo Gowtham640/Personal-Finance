@@ -3,6 +3,7 @@
 import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "../components/BottomNav";
+import { DivideTransactionSheet } from "../components/DivideTransactionSheet";
 import { CategoryPickerSheet } from "../components/CategoryPickerSheet";
 import { AddTransactionSheet } from "../components/AddTransactionSheet";
 import { MonthSelector } from "../components/MonthSelector";
@@ -13,15 +14,16 @@ import { useAuth } from "../hooks/useAuth";
 import { useSources } from "../hooks/useSources";
 import { useTransactions } from "../hooks/useTransactions";
 import { categories } from "../lib/categories";
-import { getMeta, setMeta } from "../lib/db";
+import { getMeta, replaceTransactionWithSplits, setMeta } from "../lib/db";
 import { categoryFrequency, categorySuggestion, CategoryMapping, orderedCategorySuggestions } from "../lib/merchant-intelligence";
 import { syncData } from "../lib/sync";
 import { Transaction } from "../lib/types";
 
 export default function Home() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [sheet, setSheet] = useState<"add" | "category" | "detail" | null>(null);
+  const [sheet, setSheet] = useState<"add" | "category" | "detail" | "divide" | null>(null);
   const [selected, setSelected] = useState<Transaction | null>(null);
+  const [longPressMenu, setLongPressMenu] = useState<{ transaction: Transaction; x: number; y: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [categoryMappings, setCategoryMappings] = useState<CategoryMapping>({});
   const { user, setUser } = useAuth();
@@ -58,6 +60,27 @@ export default function Home() {
       setSheet(null);
     }
   };
+  const excludeFromCashFlow = async () => {
+    if (!longPressMenu) return;
+    await update({ ...longPressMenu.transaction, excludedFromCashFlow: true, sync_status: "pending", updated_at: new Date().toISOString() });
+    setLongPressMenu(null);
+  };
+  const divideTransaction = async (amounts: number[]) => {
+    if (!selected) return;
+    const timestamp = Date.now();
+    const splits = amounts.map((amount, index) => ({
+      ...selected,
+      id: crypto.randomUUID(),
+      unique_ref: `${selected.unique_ref}-split-${timestamp}-${index + 1}`,
+      amount,
+      sync_status: "pending" as const,
+      updated_at: new Date().toISOString(),
+    }));
+    await replaceTransactionWithSplits(selected.id, splits);
+    window.dispatchEvent(new Event("expense-data-changed"));
+    setSelected(null);
+    setSheet(null);
+  };
   const selectedCategorySuggestions = selected
     ? orderedCategorySuggestions(
       categoryFrequency(transactions),
@@ -69,7 +92,7 @@ export default function Home() {
     <header className="relative mb-4 flex justify-center"><MonthSelector month={month} onChange={setMonth} /><div className="absolute right-0 top-0"><ProfileMenu user={user} onChange={setUser} /></div></header>
     <section className="space-y-8">
       <div className="glass flex items-center justify-between rounded-full px-6 py-4 text-sm"><span className="text-[#8E8E93]">Incoming: <strong className="text-[#30D158]">₹{incoming.toLocaleString("en-IN")}</strong></span><span className="text-[#8E8E93]">Outgoing: <strong className="text-[#FF453A]">₹{outgoing.toLocaleString("en-IN")}</strong></span></div>
-      <div className="space-y-6">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="mb-3 flex items-center gap-3 text-sm font-semibold"><span>{new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span><div className="h-px flex-1 bg-white/10" /></div><div className="space-y-3">{items.map((item) => <TransactionCard key={item.id} transaction={item} onCategory={() => { setSelected(item); setSheet("category"); }} onDetail={() => { setSelected(item); setSheet("detail"); }} />)}</div></section>)}</div>
+      <div className="space-y-6">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="mb-3 flex items-center gap-3 text-sm font-semibold"><span>{new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span><div className="h-px flex-1 bg-white/10" /></div><div className="space-y-3">{items.map((item) => <TransactionCard key={item.id} transaction={item} onCategory={() => { setSelected(item); setSheet("category"); }} onDetail={() => { setSelected(item); setSheet("detail"); }} onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 112) })} />)}</div></section>)}</div>
       {monthTransactions.length === 0 && <div className="py-24 text-center text-[#8E8E93]">No transactions for this month.</div>}
     </section>
     <div className="fixed bottom-24 right-5 z-30 flex items-center gap-3">
@@ -80,7 +103,9 @@ export default function Home() {
     </div>
     <BottomNav />
     {sheet === "add" && <AddTransactionSheet sources={sources} month={month} transactions={transactions} categoryMappings={categoryMappings} userId={user?.id ?? ""} onLearnCategory={learnCategory} onClose={() => setSheet(null)} />}
-    {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
+    {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} type={selected.type} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
+    {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
+    {longPressMenu && <div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void excludeFromCashFlow()} className="block w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">exclude from cash flow</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="block w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">divide transaction</button></div>}
   </main>;
 }

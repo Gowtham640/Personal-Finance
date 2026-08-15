@@ -14,6 +14,7 @@ export type Transaction = {
   description: string | null;
   balance_after: number | null;
   source: string | null;
+  excludedFromCashFlow?: boolean;
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;

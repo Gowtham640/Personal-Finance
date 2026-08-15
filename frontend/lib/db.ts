@@ -75,6 +75,16 @@ export async function putTransaction(transaction: Transaction) {
   if (db) await (await db).put("transactions", transaction);
 }
 
+export async function replaceTransactionWithSplits(originalId: string, splits: Transaction[]) {
+  const db = getDB();
+  if (!db) return;
+  const instance = await db;
+  const tx = instance.transaction("transactions", "readwrite");
+  await tx.store.delete(originalId);
+  await Promise.all(splits.map((transaction) => tx.store.put(transaction)));
+  await tx.done;
+}
+
 export async function putSource(source: Source) {
   const db = getDB();
   if (db) await (await db).put("sources", source);

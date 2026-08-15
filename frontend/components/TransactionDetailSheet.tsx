@@ -72,6 +72,6 @@ export function TransactionDetailSheet({
       <input type="number" step="0.01" value={balanceAfter} onChange={(event) => setBalanceAfter(event.target.value)} placeholder="Balance after (optional)" className="glass w-full rounded-2xl px-4 py-4 outline-none placeholder:text-[#8E8E93]" />
       <button onClick={() => void save()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white p-4 text-sm font-semibold text-black"><Check size={16} />Save changes</button>
     </div>
-    {showCategories && <CategoryPickerSheet value={category} suggestions={suggestions} onSelect={setCategory} onClose={() => setShowCategories(false)} />}
+    {showCategories && <CategoryPickerSheet value={category} type={type} suggestions={suggestions} onSelect={setCategory} onClose={() => setShowCategories(false)} />}
   </Sheet>;
 }
