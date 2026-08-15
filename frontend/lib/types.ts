@@ -14,6 +14,7 @@ export type Transaction = {
   description: string | null;
   balance_after: number | null;
   source: string | null;
+  email_timestamp?: string | null;
   excludedFromCashFlow?: boolean;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ export type BalanceHistory = {
   user_id: string;
   snapshot_date: string;
   balance: number;
+  email_timestamp?: string | null;
 };
 
 export type User = { id: string; email: string; display_name: string | null };

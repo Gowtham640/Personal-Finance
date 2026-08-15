@@ -37,19 +37,32 @@ export async function syncData() {
 async function ensureUpiSource(userId: string, history: import("./types").BalanceHistory[] | null) {
   const sources = await listSources();
   const existing = sources.find((source) => source.user_id === userId && source.source_name.toLowerCase() === "upi");
-  const localHistory = history ?? await listBalanceHistory();
+  const localHistory = history && history.length > 0 ? history : await listBalanceHistory();
   const latestSnapshot = [...localHistory]
     .filter((snapshot) => snapshot.user_id === userId)
-    .sort((left, right) => right.snapshot_date.localeCompare(left.snapshot_date))[0];
+    .sort((left, right) => recordTime(right.email_timestamp ?? right.snapshot_date) - recordTime(left.email_timestamp ?? left.snapshot_date))[0];
   if (!latestSnapshot && existing) return;
+  const snapshotTime = latestSnapshot ? recordTime(latestSnapshot.email_timestamp ?? latestSnapshot.snapshot_date) : 0;
+  const transactions = await listTransactions();
+  const projectedBalance = (latestSnapshot ? Number(latestSnapshot.balance) || 0 : 0) + transactions
+    .filter((transaction) => transaction.user_id === userId && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime)
+    .reduce((balance, transaction) => {
+      const amount = Number(transaction.amount) || 0;
+      return balance + (transaction.type === "credit" ? amount : -amount);
+    }, 0);
   const upiSource = {
     id: existing?.id ?? `upi-${userId}`,
     user_id: userId,
     source_name: "UPI",
     icon_type: "gpay" as const,
-    balance: latestSnapshot ? Number(latestSnapshot.balance) || 0 : 0,
+    balance: projectedBalance,
     updated_at: new Date().toISOString(),
     sync_status: "synced" as const,
   };
   await putSource(upiSource);
+}
+
+function recordTime(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
