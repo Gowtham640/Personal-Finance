@@ -1,7 +1,16 @@
-import { listBalanceHistory, listSources, listTransactions, putMany, putSource, setMeta } from "./db";
+import {
+  listBalanceHistory,
+  listCategoryMappings,
+  listSources,
+  listTransactions,
+  putCategoryMapping,
+  putMany,
+  putSource,
+  setMeta,
+} from "./db";
 import { api } from "./api";
 import { checkSession } from "./auth";
-import { Transaction } from "./types";
+import { Source, Transaction } from "./types";
 
 async function json<T>(path: string): Promise<T | null> {
   try {
@@ -12,26 +21,66 @@ async function json<T>(path: string): Promise<T | null> {
   }
 }
 
+async function postJson<T>(path: string, data: unknown): Promise<T | null> {
+  try {
+    const response = await api.post(path, data);
+    return response.ok ? ((await response.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+type SyncResponse = {
+  transactions: Transaction[];
+  sources: Source[];
+  category_mappings: Record<string, string>;
+};
+
 export async function syncData() {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine) return false;
   const user = await checkSession();
-  if (!user) return;
+  if (!user) return false;
+  const localTransactions = await listTransactions();
+  const localSources = await listSources();
+  const localMappings = await listCategoryMappings(user.id);
+  const state = await postJson<SyncResponse>("/api/sync", {
+    transactions: localTransactions.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
+    sources: localSources.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
+    category_mappings: Object.fromEntries(localMappings.map((item) => [item.merchant_key, item.category])),
+  });
+  if (state) {
+    await putMany(
+      "transactions",
+      state.transactions.map((item) => ({ ...item, sync_status: "synced" as const })),
+    );
+    await putMany(
+      "sources",
+      state.sources.map((item) => ({ ...item, sync_status: "synced" as const })),
+    );
+    await Promise.all(Object.entries(state.category_mappings).map(([merchantKey, category]) => putCategoryMapping({
+      id: `${user.id}:${merchantKey}`,
+      user_id: user.id,
+      merchant_key: merchantKey,
+      category,
+      updated_at: new Date().toISOString(),
+      sync_status: "synced",
+    })));
+  }
   const [transactions, history] = await Promise.all([
-    json<Transaction[]>("/api/transactions?limit=100"),
+    state ? Promise.resolve(state.transactions) : json<Transaction[]>("/api/transactions?limit=100"),
     json<import("./types").BalanceHistory[]>("/api/balance-history"),
   ]);
-  if (transactions) {
-    const localTransactions = await listTransactions();
+  if (transactions && !state) {
     const pendingIds = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.id));
     const pendingRefs = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.unique_ref));
-    const serverTransactions = transactions
+    await putMany("transactions", transactions
       .filter((item) => !pendingIds.has(item.id) && !pendingRefs.has(item.unique_ref))
-      .map((item) => ({ ...item, sync_status: "synced" as const }));
-    await putMany("transactions", serverTransactions);
+      .map((item) => ({ ...item, sync_status: "synced" as const })));
   }
   if (history) await putMany("balance_history", history);
   await ensureUpiSource(user.id, history);
   await setMeta("last_synced_at", new Date().toISOString());
+  return Boolean(state);
 }
 
 async function ensureUpiSource(userId: string, history: import("./types").BalanceHistory[] | null) {

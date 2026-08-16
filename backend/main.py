@@ -6,6 +6,7 @@ import logging
 import os
 from hashlib import sha256
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ from google.auth.transport.requests import Request as GoogleRequest
 from supabase import Client, create_client
 
 from gmail_client import oauth_flow, tokens_from_credentials
+from models import SyncRequest
 from utils import sign_session, verify_session
 
 load_dotenv()
@@ -207,6 +209,51 @@ def hmac_compare(left: str, right: str) -> bool:
     return hmac.compare_digest(left, right)
 
 
+def serialize_transaction(row: dict) -> dict:
+    return {
+        **row,
+        "source": row.get("source"),
+        "email_timestamp": row.get("email_timestamp"),
+        "excludedFromCashFlow": row.get("excluded_from_cash_flow", False),
+    }
+
+
+def serialize_source(row: dict) -> dict:
+    return {**row, "sync_status": "synced"}
+
+
+def current_sync_state(user_id: UUID) -> dict:
+    user_key = str(user_id)
+    transactions = (
+        db.table("fin_transactions")
+        .select("*")
+        .eq("user_id", user_key)
+        .order("transaction_date", desc=True)
+        .limit(5000)
+        .execute()
+    )
+    sources = (
+        db.table("fin_sources")
+        .select("*")
+        .eq("user_id", user_key)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    mappings = (
+        db.table("fin_category_mappings")
+        .select("merchant_key,category")
+        .eq("user_id", user_key)
+        .execute()
+    )
+    return {
+        "transactions": [serialize_transaction(row) for row in transactions.data],
+        "sources": [serialize_source(row) for row in sources.data],
+        "category_mappings": {
+            row["merchant_key"]: row["category"] for row in mappings.data
+        },
+    }
+
+
 @app.get("/api/me")
 def me(user_id: UUID = Depends(current_user_id)):
     result = (
@@ -240,7 +287,66 @@ def transactions(
         .limit(limit)
         .execute()
     )
-    return result.data
+    return [serialize_transaction(row) for row in result.data]
+
+
+@app.post("/api/sync")
+def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
+    user_key = str(user_id)
+    transaction_rows = []
+    for row in payload.transactions:
+        transaction_rows.append(
+            {
+                "id": row["id"],
+                "user_id": user_key,
+                "unique_ref": row["unique_ref"],
+                "transaction_date": row["transaction_date"],
+                "amount": row["amount"],
+                "type": row["type"],
+                "merchant": row.get("merchant"),
+                "category": row.get("category"),
+                "description": row.get("description"),
+                "balance_after": row.get("balance_after"),
+                "source": row.get("source"),
+                "email_timestamp": row.get("email_timestamp"),
+                "excluded_from_cash_flow": row.get("excludedFromCashFlow", False),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        )
+    if transaction_rows:
+        db.table("fin_transactions").upsert(transaction_rows, on_conflict="id").execute()
+
+    source_rows = []
+    for row in payload.sources:
+        source_rows.append(
+            {
+                "id": row["id"],
+                "user_id": user_key,
+                "source_name": row["source_name"],
+                "icon_type": row["icon_type"],
+                "balance": row["balance"],
+                "updated_at": row["updated_at"],
+            }
+        )
+    if source_rows:
+        db.table("fin_sources").upsert(source_rows, on_conflict="id").execute()
+
+    mapping_rows = [
+        {
+            "user_id": user_key,
+            "merchant_key": merchant_key,
+            "category": category,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        for merchant_key, category in payload.category_mappings.items()
+    ]
+    if mapping_rows:
+        db.table("fin_category_mappings").upsert(
+            mapping_rows, on_conflict="user_id,merchant_key"
+        ).execute()
+
+    return current_sync_state(user_id)
 
 
 @app.get("/api/balance-history")

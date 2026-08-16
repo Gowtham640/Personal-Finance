@@ -17,6 +17,6 @@ export async function checkSession(): Promise<User | null> {
 
 export const googleSignInUrl = `${API_BASE}/auth/google`;
 
-export async function signOut() {
-  await clearLocalData();
+export async function signOut(clearLocalCache = true) {
+  if (clearLocalCache) await clearLocalData();
 }

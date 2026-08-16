@@ -14,7 +14,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useSources } from "../hooks/useSources";
 import { useTransactions } from "../hooks/useTransactions";
 import { categories } from "../lib/categories";
-import { getMeta, replaceTransactionWithSplits, setMeta } from "../lib/db";
+import { getMeta, listCategoryMappings, putCategoryMapping, replaceTransactionWithSplits, setMeta } from "../lib/db";
 import { categoryFrequency, categorySuggestion, CategoryMapping, orderedCategorySuggestions } from "../lib/merchant-intelligence";
 import { syncData } from "../lib/sync";
 import { Transaction } from "../lib/types";
@@ -30,10 +30,26 @@ export default function Home() {
   const { sources } = useSources();
   const { transactions, update } = useTransactions();
   useEffect(() => {
-    void getMeta<CategoryMapping>("merchant_category_mappings").then((value) => {
-      if (value) setCategoryMappings(value);
+    if (!user) return;
+    void Promise.all([
+      listCategoryMappings(user.id),
+      getMeta<CategoryMapping>("merchant_category_mappings"),
+    ]).then(([records, legacy]) => {
+      const next = {
+        ...(legacy ?? {}),
+        ...Object.fromEntries(records.map((item) => [item.merchant_key, item.category])),
+      };
+      setCategoryMappings(next);
+      void Promise.all(Object.entries(legacy ?? {}).map(([merchantKey, category]) => putCategoryMapping({
+        id: `${user.id}:${merchantKey}`,
+        user_id: user.id,
+        merchant_key: merchantKey,
+        category,
+        updated_at: new Date().toISOString(),
+        sync_status: "pending",
+      })));
     });
-  }, []);
+  }, [user]);
   const monthTransactions = useMemo(() => transactions.filter((item) => { const date = new Date(item.transaction_date); return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).sort((a, b) => b.transaction_date.localeCompare(a.transaction_date)), [transactions, month]);
   const cashFlowMonthTransactions = useMemo(() => monthTransactions.filter((item) => !item.excludedFromCashFlow), [monthTransactions]);
   const grouped = monthTransactions.reduce<Record<string, Transaction[]>>((acc, item) => { const key = item.transaction_date.slice(0, 10); (acc[key] ??= []).push(item); return acc; }, {});
@@ -52,6 +68,14 @@ export default function Home() {
     const next = { ...categoryMappings, [merchant.trim().toLowerCase()]: category };
     setCategoryMappings(next);
     void setMeta("merchant_category_mappings", next);
+    if (user) void putCategoryMapping({
+      id: `${user.id}:${merchant.trim().toLowerCase()}`,
+      user_id: user.id,
+      merchant_key: merchant.trim().toLowerCase(),
+      category,
+      updated_at: new Date().toISOString(),
+      sync_status: "pending",
+    });
   };
   const editCategory = async (category: string) => {
     if (selected) {
@@ -107,6 +131,6 @@ export default function Home() {
     {sheet === "category" && selected && <CategoryPickerSheet value={selected.category} type={selected.type} suggestions={selectedCategorySuggestions} onSelect={editCategory} onClose={() => setSheet(null)} />}
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
     {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
-    {longPressMenu && <><div className="fixed inset-0 z-[59]" onPointerDown={() => setLongPressMenu(null)} /><div className="fixed z-[60] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void toggleCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div></>}
+    {longPressMenu && <><div className="fixed inset-0 z-59" onPointerDown={() => setLongPressMenu(null)} /><div className="fixed z-60 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void toggleCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div></>}
   </main>;
 }

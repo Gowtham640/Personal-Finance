@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class User(BaseModel):
@@ -44,6 +44,12 @@ class BalanceSnapshot(BaseModel):
     snapshot_date: datetime
     balance: Decimal
     created_at: datetime | None = None
+
+
+class SyncRequest(BaseModel):
+    transactions: list[dict[str, Any]] = Field(default_factory=list)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    category_mappings: dict[str, str] = Field(default_factory=dict)
 
 
 class SessionPayload(BaseModel):
