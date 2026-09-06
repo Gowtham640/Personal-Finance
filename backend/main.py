@@ -214,6 +214,7 @@ def serialize_transaction(row: dict) -> dict:
         **row,
         "source": row.get("source"),
         "email_timestamp": row.get("email_timestamp"),
+        "notes": row.get("notes"),
         "excludedFromCashFlow": row.get("excluded_from_cash_flow", False),
     }
 
@@ -306,6 +307,7 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
                 "merchant": row.get("merchant"),
                 "category": row.get("category"),
                 "description": row.get("description"),
+                "notes": row.get("notes"),
                 "balance_after": row.get("balance_after"),
                 "source": row.get("source"),
                 "email_timestamp": row.get("email_timestamp"),

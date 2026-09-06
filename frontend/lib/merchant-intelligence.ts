@@ -66,7 +66,7 @@ export function buildMerchantTrie(transactions: Transaction[]) {
   const trie = new MerchantTrie();
   Object.keys(commonMerchantCategories).forEach((merchant) => trie.add(merchant));
   transactions.forEach((transaction) => {
-    if (transaction.merchant) trie.add(transaction.merchant);
+    if (!transaction.excludedFromCashFlow && transaction.merchant) trie.add(transaction.merchant);
   });
   return trie;
 }
@@ -93,6 +93,7 @@ export function categorySuggestion(
 
 export function categoryFrequency(transactions: Transaction[]) {
   return transactions.reduce<Record<string, number>>((frequency, transaction) => {
+    if (transaction.excludedFromCashFlow) return frequency;
     if (transaction.category) frequency[transaction.category] = (frequency[transaction.category] ?? 0) + 1;
     return frequency;
   }, {});

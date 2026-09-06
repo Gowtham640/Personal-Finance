@@ -31,6 +31,7 @@ class Transaction(BaseModel):
     merchant: str | None = None
     category: str | None = None
     description: str | None = None
+    notes: str | None = None
     balance_after: Decimal | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

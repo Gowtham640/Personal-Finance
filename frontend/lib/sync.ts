@@ -10,6 +10,7 @@ import {
 } from "./db";
 import { api } from "./api";
 import { checkSession } from "./auth";
+import { categorySuggestion } from "./merchant-intelligence";
 import { Source, Transaction } from "./types";
 
 async function json<T>(path: string): Promise<T | null> {
@@ -49,9 +50,25 @@ export async function syncData() {
     category_mappings: Object.fromEntries(localMappings.map((item) => [item.merchant_key, item.category])),
   });
   if (state) {
+    const learnedMappings = Object.fromEntries(
+      localMappings.map((item) => [item.merchant_key, item.category]),
+    );
+    const categorizedTransactions = state.transactions.map((item) => {
+      const category = item.category ?? categorySuggestion(
+        item.merchant ?? "",
+        Number(item.amount) || 0,
+        item.type,
+        learnedMappings,
+      ) ?? "Other";
+      return {
+        ...item,
+        category,
+        sync_status: item.category ? "synced" as const : "pending" as const,
+      };
+    });
     await putMany(
       "transactions",
-      state.transactions.map((item) => ({ ...item, sync_status: "synced" as const })),
+      categorizedTransactions,
     );
     await putMany(
       "sources",
@@ -75,7 +92,16 @@ export async function syncData() {
     const pendingRefs = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.unique_ref));
     await putMany("transactions", transactions
       .filter((item) => !pendingIds.has(item.id) && !pendingRefs.has(item.unique_ref))
-      .map((item) => ({ ...item, sync_status: "synced" as const })));
+      .map((item) => ({
+        ...item,
+        category: item.category ?? categorySuggestion(
+          item.merchant ?? "",
+          Number(item.amount) || 0,
+          item.type,
+          Object.fromEntries(localMappings.map((mapping) => [mapping.merchant_key, mapping.category])),
+        ) ?? "Other",
+        sync_status: "synced" as const,
+      })));
   }
   if (history) await putMany("balance_history", history);
   await ensureUpiSource(user.id, history);
@@ -94,7 +120,7 @@ async function ensureUpiSource(userId: string, history: import("./types").Balanc
   const snapshotTime = latestSnapshot ? recordTime(latestSnapshot.email_timestamp ?? latestSnapshot.snapshot_date) : 0;
   const transactions = await listTransactions();
   const projectedBalance = (latestSnapshot ? Number(latestSnapshot.balance) || 0 : 0) + transactions
-    .filter((transaction) => transaction.user_id === userId && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime)
+    .filter((transaction) => transaction.user_id === userId && !transaction.excludedFromCashFlow && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime)
     .reduce((balance, transaction) => {
       const amount = Number(transaction.amount) || 0;
       return balance + (transaction.type === "credit" ? amount : -amount);

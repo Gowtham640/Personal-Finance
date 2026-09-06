@@ -12,6 +12,7 @@ export type Transaction = {
   merchant: string | null;
   category: string | null;
   description: string | null;
+  notes: string | null;
   balance_after: number | null;
   source: string | null;
   email_timestamp?: string | null;

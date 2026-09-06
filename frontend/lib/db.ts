@@ -32,7 +32,7 @@ let database: Promise<IDBPDatabase<ExpenseDB>> | undefined;
 
 export function getDB() {
   if (typeof window === "undefined") return undefined;
-  database ??= openDB<ExpenseDB>("expense-tracker", 2, {
+    database ??= openDB<ExpenseDB>("expense-tracker", 3, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         const transactions = db.createObjectStore("transactions", { keyPath: "id" });
