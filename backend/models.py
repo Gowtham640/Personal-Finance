@@ -33,6 +33,17 @@ class Transaction(BaseModel):
     description: str | None = None
     notes: str | None = None
     balance_after: Decimal | None = None
+    group_id: UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class Group(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: UUID
+    user_id: UUID
+    name: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -50,6 +61,7 @@ class BalanceSnapshot(BaseModel):
 class SyncRequest(BaseModel):
     transactions: list[dict[str, Any]] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    groups: list[dict[str, Any]] = Field(default_factory=list)
     category_mappings: dict[str, str] = Field(default_factory=dict)
 
 

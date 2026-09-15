@@ -213,6 +213,7 @@ def serialize_transaction(row: dict) -> dict:
     return {
         **row,
         "source": row.get("source"),
+        "group_id": row.get("group_id"),
         "email_timestamp": row.get("email_timestamp"),
         "notes": row.get("notes"),
         "excludedFromCashFlow": row.get("excluded_from_cash_flow", False),
@@ -220,6 +221,9 @@ def serialize_transaction(row: dict) -> dict:
 
 
 def serialize_source(row: dict) -> dict:
+    return {**row, "sync_status": "synced"}
+
+def serialize_group(row: dict) -> dict:
     return {**row, "sync_status": "synced"}
 
 
@@ -240,6 +244,13 @@ def current_sync_state(user_id: UUID) -> dict:
         .order("updated_at", desc=True)
         .execute()
     )
+    groups = (
+        db.table("fin_groups")
+        .select("*")
+        .eq("user_id", user_key)
+        .order("updated_at", desc=True)
+        .execute()
+    )
     mappings = (
         db.table("fin_category_mappings")
         .select("merchant_key,category")
@@ -249,6 +260,7 @@ def current_sync_state(user_id: UUID) -> dict:
     return {
         "transactions": [serialize_transaction(row) for row in transactions.data],
         "sources": [serialize_source(row) for row in sources.data],
+        "groups": [serialize_group(row) for row in groups.data],
         "category_mappings": {
             row["merchant_key"]: row["category"] for row in mappings.data
         },
@@ -294,6 +306,27 @@ def transactions(
 @app.post("/api/sync")
 def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
     user_key = str(user_id)
+    group_rows = []
+    for row in payload.groups:
+        group_rows.append(
+            {
+                "id": row["id"],
+                "user_id": user_key,
+                "name": row["name"],
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        )
+    if group_rows:
+        db.table("fin_groups").upsert(group_rows, on_conflict="id").execute()
+    existing_groups = (
+        db.table("fin_groups")
+        .select("id")
+        .eq("user_id", user_key)
+        .execute()
+    )
+    allowed_group_ids = {row["id"] for row in existing_groups.data}
+
     transaction_rows = []
     for row in payload.transactions:
         transaction_rows.append(
@@ -310,6 +343,7 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
                 "notes": row.get("notes"),
                 "balance_after": row.get("balance_after"),
                 "source": row.get("source"),
+                "group_id": row.get("group_id") if row.get("group_id") in allowed_group_ids else None,
                 "email_timestamp": row.get("email_timestamp"),
                 "excluded_from_cash_flow": row.get("excludedFromCashFlow", False),
                 "created_at": row.get("created_at"),

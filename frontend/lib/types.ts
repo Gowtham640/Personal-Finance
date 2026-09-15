@@ -15,6 +15,7 @@ export type Transaction = {
   notes: string | null;
   balance_after: number | null;
   source: string | null;
+  group_id: string | null;
   email_timestamp?: string | null;
   excludedFromCashFlow?: boolean;
   created_at: string;
@@ -28,6 +29,15 @@ export type Source = {
   source_name: string;
   icon_type: IconType;
   balance: number;
+  updated_at: string;
+  sync_status: SyncStatus;
+};
+
+export type Group = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
   updated_at: string;
   sync_status: SyncStatus;
 };

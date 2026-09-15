@@ -1,9 +1,10 @@
 "use client";
 
-import { Ban, GitBranch, Plus, RefreshCw, Undo2 } from "lucide-react";
+import { Ban, FolderPlus, GitBranch, Plus, RefreshCw, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "../components/BottomNav";
 import { DivideTransactionSheet } from "../components/DivideTransactionSheet";
+import { GroupPickerSheet } from "../components/GroupPickerSheet";
 import { CategoryPickerSheet } from "../components/CategoryPickerSheet";
 import { AddTransactionSheet } from "../components/AddTransactionSheet";
 import { AuthGate } from "../components/AuthGate";
@@ -14,6 +15,7 @@ import { TransactionCard } from "../components/TransactionCard";
 import { TransactionDetailSheet } from "../components/TransactionDetailSheet";
 import { useAuth } from "../hooks/useAuth";
 import { useSources } from "../hooks/useSources";
+import { useGroups } from "../hooks/useGroups";
 import { useTransactions } from "../hooks/useTransactions";
 import { categories } from "../lib/categories";
 import { getMeta, listCategoryMappings, putCategoryMapping, replaceTransactionWithSplits, setMeta } from "../lib/db";
@@ -23,13 +25,14 @@ import { Transaction } from "../lib/types";
 
 export default function Home() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [sheet, setSheet] = useState<"add" | "category" | "detail" | "divide" | "note" | null>(null);
+  const [sheet, setSheet] = useState<"add" | "category" | "detail" | "divide" | "note" | "group" | null>(null);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [longPressMenu, setLongPressMenu] = useState<{ transaction: Transaction; x: number; y: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [categoryMappings, setCategoryMappings] = useState<CategoryMapping>({});
   const { user, setUser, loading } = useAuth();
   const { sources } = useSources();
+  const { groups, create: createGroup } = useGroups(user?.id);
   const { transactions, update } = useTransactions();
   useEffect(() => {
     if (!user) return;
@@ -54,7 +57,21 @@ export default function Home() {
   }, [user]);
   const monthTransactions = useMemo(() => transactions.filter((item) => { const date = new Date(item.transaction_date); return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).sort((a, b) => b.transaction_date.localeCompare(a.transaction_date)), [transactions, month]);
   const cashFlowMonthTransactions = useMemo(() => monthTransactions.filter((item) => !item.excludedFromCashFlow), [monthTransactions]);
-  const grouped = monthTransactions.reduce<Record<string, Transaction[]>>((acc, item) => { const key = item.transaction_date.slice(0, 10); (acc[key] ??= []).push(item); return acc; }, {});
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredMonthTransactions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return monthTransactions;
+    return monthTransactions.filter((transaction) => {
+      const primaryFields = [
+        transaction.merchant,
+        transaction.amount,
+        transaction.category,
+      ].map((value) => String(value ?? "").toLowerCase());
+      if (primaryFields.some((value) => value.includes(query))) return true;
+      return Object.values(transaction).some((value) => String(value ?? "").toLowerCase().includes(query));
+    });
+  }, [monthTransactions, searchQuery]);
+  const grouped = filteredMonthTransactions.reduce<Record<string, Transaction[]>>((acc, item) => { const key = item.transaction_date.slice(0, 10); (acc[key] ??= []).push(item); return acc; }, {});
   const incoming = cashFlowMonthTransactions.filter((item) => item.type === "credit").reduce((sum, item) => sum + Number(item.amount), 0);
   const outgoing = cashFlowMonthTransactions.filter((item) => item.type === "debit").reduce((sum, item) => sum + Number(item.amount), 0);
   const refreshLatestTransactions = async () => {
@@ -92,6 +109,12 @@ export default function Home() {
     await update({ ...longPressMenu.transaction, excludedFromCashFlow: !longPressMenu.transaction.excludedFromCashFlow, sync_status: "pending", updated_at: new Date().toISOString() });
     setLongPressMenu(null);
   };
+  const addToGroup = async (groupId: string | null) => {
+    if (!selected) return;
+    await update({ ...selected, group_id: groupId, sync_status: "pending", updated_at: new Date().toISOString() });
+    setSelected(null);
+    setSheet(null);
+  };
   const divideTransaction = async (amounts: number[]) => {
     if (!selected) return;
     const timestamp = Date.now();
@@ -117,9 +140,13 @@ export default function Home() {
     : [];
   return <AuthGate user={user} loading={loading}><main className="mx-auto min-h-screen max-w-2xl overflow-x-hidden px-4 pb-32 pt-2 sm:px-5">
     <header className="relative mb-4 flex justify-center"><MonthSelector month={month} onChange={setMonth} /><div className="absolute right-0 top-0"><ProfileMenu user={user} onChange={setUser} /></div></header>
-    <section className="space-y-8">
+    <section className="space-y-6">
       <div className="glass flex items-center justify-between rounded-full px-6 py-4 text-sm"><span className="text-[#8E8E93]">Incoming: <strong className="text-[#30D158]">₹{incoming.toLocaleString("en-IN")}</strong></span><span className="text-[#8E8E93]">Outgoing: <strong className="text-[#FF453A]">₹{outgoing.toLocaleString("en-IN")}</strong></span></div>
+      <label className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+        <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#8E8E93]" />
+      </label>
       <div className="space-y-6">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="mb-3 flex items-center gap-3 text-sm font-semibold"><span>{new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span><div className="h-px flex-1 bg-white/10" /></div><div className="space-y-3">{items.map((item) => <TransactionCard key={item.id} transaction={item} onCategory={() => { setSelected(item); setSheet("category"); }} onDetail={() => { setSelected(item); setSheet("detail"); }} onNote={() => { setSelected(item); setSheet("note"); }} onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 112) })} />)}</div></section>)}</div>
+      {monthTransactions.length > 0 && filteredMonthTransactions.length === 0 && <div className="py-24 text-center text-[#8E8E93]">No matching transactions.</div>}
       {monthTransactions.length === 0 && <div className="py-24 text-center text-[#8E8E93]">No transactions for this month.</div>}
     </section>
     <div className="fixed bottom-24 right-5 z-30 flex items-center gap-3">
@@ -134,6 +161,7 @@ export default function Home() {
     {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} />}
     {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
     {sheet === "note" && selected && <TransactionNoteSheet initialNote={selected.notes} onSave={(notes) => { void update({ ...selected, notes, sync_status: "pending", updated_at: new Date().toISOString() }); setSheet(null); }} onClose={() => setSheet(null)} />}
-    {longPressMenu && <><div className="fixed inset-0 z-59" onPointerDown={() => setLongPressMenu(null)} /><div className="fixed z-60 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}><button type="button" onClick={() => void toggleCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div></>}
+    {sheet === "group" && selected && <GroupPickerSheet groups={groups} currentGroupId={selected.group_id ?? null} onSelect={(groupId) => { void addToGroup(groupId); }} onCreate={createGroup} onClose={() => { setSelected(null); setSheet(null); }} />}
+    {longPressMenu && <><div className="fixed inset-0 z-59" onPointerDown={() => setLongPressMenu(null)} /><div className="fixed z-60 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: Math.min(longPressMenu.y, document.documentElement.clientHeight - 168) }}><button type="button" onClick={() => void toggleCashFlow()} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("group"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><FolderPlus size={16} />Add to group</button><button type="button" onClick={() => { setSelected(longPressMenu.transaction); setSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button></div></>}
   </main></AuthGate>;
 }

@@ -37,6 +37,14 @@ input {
   font: inherit;
 }
 
+svg,
+.recharts-wrapper,
+.recharts-surface {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 button {
   cursor: pointer;
 }

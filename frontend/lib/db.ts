@@ -1,5 +1,5 @@
 import { DBSchema, IDBPDatabase, openDB } from "idb";
-import { BalanceHistory, Source, Transaction, User } from "./types";
+import { BalanceHistory, Group, Source, Transaction, User } from "./types";
 import { CategoryMapping } from "./merchant-intelligence";
 
 type MetaValue = string | User | CategoryMapping | null;
@@ -19,6 +19,7 @@ interface ExpenseDB extends DBSchema {
     indexes: { "by-date": string; "by-category": string; "by-user": string };
   };
   sources: { key: string; value: Source; indexes: { "by-user": string } };
+  groups: { key: string; value: Group; indexes: { "by-user": string } };
   balance_history: { key: string; value: BalanceHistory; indexes: { "by-user": string } };
   meta: { key: string; value: { key: string; value: MetaValue } };
   category_mappings: {
@@ -32,7 +33,7 @@ let database: Promise<IDBPDatabase<ExpenseDB>> | undefined;
 
 export function getDB() {
   if (typeof window === "undefined") return undefined;
-    database ??= openDB<ExpenseDB>("expense-tracker", 3, {
+    database ??= openDB<ExpenseDB>("expense-tracker", 4, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         const transactions = db.createObjectStore("transactions", { keyPath: "id" });
@@ -48,6 +49,10 @@ export function getDB() {
       if (oldVersion < 2) {
         const mappings = db.createObjectStore("category_mappings", { keyPath: "id" });
         mappings.createIndex("by-user", "user_id");
+      }
+      if (oldVersion < 4) {
+        const groups = db.createObjectStore("groups", { keyPath: "id" });
+        groups.createIndex("by-user", "user_id");
       }
     },
   });
@@ -69,10 +74,11 @@ export async function clearLocalData() {
   const db = getDB();
   if (!db) return;
   const instance = await db;
-  const tx = instance.transaction(["transactions", "sources", "balance_history", "meta", "category_mappings"], "readwrite");
+  const tx = instance.transaction(["transactions", "sources", "groups", "balance_history", "meta", "category_mappings"], "readwrite");
   await Promise.all([
     tx.objectStore("transactions").clear(),
     tx.objectStore("sources").clear(),
+    tx.objectStore("groups").clear(),
     tx.objectStore("balance_history").clear(),
     tx.objectStore("meta").clear(),
     tx.objectStore("category_mappings").clear(),
@@ -88,6 +94,15 @@ export async function listTransactions() {
 export async function listSources() {
   const db = getDB();
   return db ? (await db).getAll("sources") : [];
+}
+
+export async function listGroups(userId?: string) {
+  const db = getDB();
+  if (!db) return [];
+  const instance = await db;
+  return userId
+    ? instance.getAllFromIndex("groups", "by-user", userId)
+    : instance.getAll("groups");
 }
 
 export async function listBalanceHistory() {
@@ -115,6 +130,11 @@ export async function putSource(source: Source) {
   if (db) await (await db).put("sources", source);
 }
 
+export async function putGroup(group: Group) {
+  const db = getDB();
+  if (db) await (await db).put("groups", group);
+}
+
 export async function listCategoryMappings(userId: string) {
   const db = getDB();
   return db ? (await db).getAllFromIndex("category_mappings", "by-user", userId) : [];
@@ -125,7 +145,7 @@ export async function putCategoryMapping(mapping: CategoryMappingRecord) {
   if (db) await (await db).put("category_mappings", mapping);
 }
 
-export async function putMany<T extends "transactions" | "sources" | "balance_history">(
+export async function putMany<T extends "transactions" | "sources" | "groups" | "balance_history">(
   store: T,
   values: ExpenseDB[T]["value"][],
 ) {
