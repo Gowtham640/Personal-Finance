@@ -6,7 +6,7 @@ import { FileText } from "lucide-react";
 import { Transaction } from "../lib/types";
 import { categoryIcon } from "../lib/categories";
 
-export function TransactionCard({ transaction, onCategory, onDetail, onLongPress, onNote }: { transaction: Transaction; onCategory: () => void; onDetail: () => void; onLongPress: (position: { x: number; y: number }) => void; onNote: () => void }) {
+export function TransactionCard({ transaction, groupColor, onCategory, onDetail, onLongPress, onNote }: { transaction: Transaction; groupColor?: string; onCategory: () => void; onDetail: () => void; onLongPress: (position: { x: number; y: number }) => void; onNote: () => void }) {
   const credit = transaction.type === "credit";
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
@@ -28,7 +28,8 @@ export function TransactionCard({ transaction, onCategory, onDetail, onLongPress
     }
     onDetail();
   };
-  return <article onClick={handleClick} onPointerDown={handlePointerDown} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} className={`glass rounded-3xl p-4 transition-transform duration-150 active:scale-[0.98] ${transaction.excludedFromCashFlow ? "opacity-50" : ""}`}>
+  return <article onClick={handleClick} onPointerDown={handlePointerDown} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} className={`glass relative overflow-hidden rounded-3xl p-4 transition-transform duration-150 active:scale-[0.98] ${transaction.excludedFromCashFlow ? "opacity-50" : ""}`}>
+    {groupColor && <span aria-label="Grouped transaction" className="pointer-events-none absolute right-0 top-0 h-8 w-8" style={{ backgroundColor: groupColor, clipPath: "polygon(100% 0, 100% 100%, 0 0)" }} />}
     <div className="flex items-center justify-between gap-3 text-sm"><div><span className="text-[#8E8E93]">{credit ? "From:" : "To:"}</span> <span className="font-medium">{transaction.merchant || "Unknown"}</span></div><button type="button" aria-label="Add transaction note" onClick={(event) => { event.stopPropagation(); onNote(); }} className="rounded-full p-1.5 text-[#8E8E93] hover:bg-white/10"><FileText size={16} /></button></div>
     <div className="my-3 border-t border-white/10" />
     <div className="flex items-center justify-between gap-4"><strong className={`text-xl ${credit ? "text-[#30D158]" : "text-(--red)"}`}>{credit ? "+" : "−"}₹{transaction.amount.toLocaleString("en-IN")}</strong><button onClick={(event) => { event.stopPropagation(); onCategory(); }} className="flex w-fit items-center gap-2 rounded-full bg-[rgba(58,58,60,0.7)] px-3 py-2 text-xs text-white">{createElement(categoryIcon(transaction.category), { size: 15 })}{transaction.category || "Other"}</button></div>

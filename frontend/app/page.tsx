@@ -19,6 +19,7 @@ import { useGroups } from "../hooks/useGroups";
 import { useTransactions } from "../hooks/useTransactions";
 import { categories } from "../lib/categories";
 import { getMeta, listCategoryMappings, putCategoryMapping, replaceTransactionWithSplits, setMeta } from "../lib/db";
+import { groupColor } from "../lib/group-colors";
 import { categoryFrequency, categorySuggestion, CategoryMapping, orderedCategorySuggestions } from "../lib/merchant-intelligence";
 import { syncData } from "../lib/sync";
 import { Transaction } from "../lib/types";
@@ -152,7 +153,7 @@ export default function Home() {
       <label className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
         <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#8E8E93]" />
       </label>
-      <div className="space-y-6">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="mb-3 flex items-center gap-3 text-sm font-semibold"><span>{new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span><div className="h-px flex-1 bg-white/10" /></div><div className="space-y-3">{items.map((item) => <TransactionCard key={item.id} transaction={item} onCategory={() => { setSelected(item); setSheet("category"); }} onDetail={() => { setSelected(item); setSheet("detail"); }} onNote={() => { setSelected(item); setSheet("note"); }} onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 112) })} />)}</div></section>)}</div>
+      <div className="space-y-6">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="mb-3 flex items-center gap-3 text-sm font-semibold"><span>{new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span><div className="h-px flex-1 bg-white/10" /></div><div className="space-y-3">{items.map((item) => <TransactionCard key={item.id} transaction={item} groupColor={item.group_id ? groupColor(item.group_id) : undefined} onCategory={() => { setSelected(item); setSheet("category"); }} onDetail={() => { setSelected(item); setSheet("detail"); }} onNote={() => { setSelected(item); setSheet("note"); }} onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 112) })} />)}</div></section>)}</div>
       {monthTransactions.length > 0 && filteredMonthTransactions.length === 0 && <div className="py-24 text-center text-[#8E8E93]">No matching transactions.</div>}
       {monthTransactions.length === 0 && <div className="py-24 text-center text-[#8E8E93]">No transactions for this month.</div>}
     </section>
