@@ -19,7 +19,7 @@ function tooltipAmount(value: unknown) {
   return `₹${Number(value ?? 0).toLocaleString("en-IN")}`;
 }
 
-export function AnalyticsCharts({ transactions, sources, groups, onCategorySelect }: { transactions: Transaction[]; sources: Source[]; groups: Group[]; onCategorySelect: (category: string, type: "debit" | "credit") => void }) {
+export function AnalyticsCharts({ transactions, sources, groups, onCategorySelect, onGroupSelect }: { transactions: Transaction[]; sources: Source[]; groups: Group[]; onCategorySelect: (category: string, type: "debit" | "credit") => void; onGroupSelect: (groupId: string) => void }) {
   const [flow, setFlow] = useState<"debit" | "credit">("debit");
   const [categoryFlow, setCategoryFlow] = useState<"debit" | "credit">("debit");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(groups[0]?.id ?? null);
@@ -103,7 +103,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
           </div>
           <div className="mb-6 h-64">
             <ResponsiveContainer>
-              <BarChart data={byGroup} onClick={(state) => { const index = Number(state?.activeTooltipIndex); const item = Number.isInteger(index) ? byGroup[index] : undefined; if (item?.id) setSelectedGroupId(item.id); }}>
+              <BarChart data={byGroup} onClick={(state) => { const index = Number(state?.activeTooltipIndex); const item = Number.isInteger(index) ? byGroup[index] : undefined; if (item?.id) { setSelectedGroupId(item.id); onGroupSelect(item.id); } }}>
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
                 <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
                 <Tooltip contentStyle={tooltipStyle} formatter={tooltipAmount} />

@@ -23,6 +23,13 @@ import { categoryFrequency, categorySuggestion, CategoryMapping, orderedCategory
 import { syncData } from "../lib/sync";
 import { Transaction } from "../lib/types";
 
+function transactionTime(transaction: Transaction) {
+  const primaryTimestamp = Date.parse(transaction.email_timestamp ?? transaction.transaction_date);
+  if (Number.isFinite(primaryTimestamp)) return primaryTimestamp;
+  const fallbackTimestamp = Date.parse(transaction.created_at);
+  return Number.isFinite(fallbackTimestamp) ? fallbackTimestamp : 0;
+}
+
 export default function Home() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [sheet, setSheet] = useState<"add" | "category" | "detail" | "divide" | "note" | "group" | null>(null);
@@ -55,7 +62,7 @@ export default function Home() {
       })));
     });
   }, [user]);
-  const monthTransactions = useMemo(() => transactions.filter((item) => { const date = new Date(item.transaction_date); return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).sort((a, b) => b.transaction_date.localeCompare(a.transaction_date)), [transactions, month]);
+  const monthTransactions = useMemo(() => transactions.filter((item) => { const date = new Date(item.transaction_date); return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(); }).sort((left, right) => transactionTime(right) - transactionTime(left) || right.updated_at.localeCompare(left.updated_at)), [transactions, month]);
   const cashFlowMonthTransactions = useMemo(() => monthTransactions.filter((item) => !item.excludedFromCashFlow), [monthTransactions]);
   const [searchQuery, setSearchQuery] = useState("");
   const filteredMonthTransactions = useMemo(() => {
