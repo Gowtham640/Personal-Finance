@@ -62,4 +62,4 @@ export type BalanceHistory = {
   email_timestamp?: string | null;
 };
 
-export type User = { id: string; email: string; display_name: string | null; gmail_connected?: boolean; expired?: boolean };
+export type User = { id: string; email: string; display_name: string | null; profile_picture_url?: string | null; gmail_connected?: boolean; expired?: boolean };

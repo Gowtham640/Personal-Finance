@@ -14,6 +14,7 @@ class User(BaseModel):
     id: UUID
     email: str
     display_name: str | None = None
+    profile_picture_url: str | None = None
     gmail_tokens: dict[str, Any] | None = None
     gmail_connected_at: datetime | None = None
     gmail_expires_at: datetime | None = None

@@ -177,19 +177,20 @@ def google_callback(
             raise ValueError("Google did not return an email address")
         tokens = tokens_from_credentials(flow.credentials)
         connected_at = datetime.now(timezone.utc)
+        user_payload = {
+            "email": email,
+            "display_name": claims.get("name"),
+            "gmail_tokens": tokens,
+            "gmail_connected_at": connected_at.isoformat(),
+            "gmail_expires_at": gmail_credential_expires_at(connected_at).isoformat(),
+            "expired": False,
+        }
+        picture = claims.get("picture")
+        if isinstance(picture, str) and picture.startswith("https://"):
+            user_payload["profile_picture_url"] = picture
         result = (
             db.table("fin_users")
-            .upsert(
-                {
-                    "email": email,
-                    "display_name": claims.get("name"),
-                    "gmail_tokens": tokens,
-                    "gmail_connected_at": connected_at.isoformat(),
-                    "gmail_expires_at": gmail_credential_expires_at(connected_at).isoformat(),
-                    "expired": False,
-                },
-                on_conflict="email",
-            )
+            .upsert(user_payload, on_conflict="email")
             .execute()
         )
         if not result.data:
@@ -291,7 +292,7 @@ def current_sync_state(user_id: UUID) -> dict:
 def me(user_id: UUID = Depends(current_user_id)):
     result = (
         db.table("fin_users")
-        .select("id,email,display_name,gmail_tokens,gmail_expires_at,expired")
+        .select("id,email,display_name,profile_picture_url,gmail_tokens,gmail_expires_at,expired")
         .eq("id", str(user_id))
         .single()
         .execute()
@@ -306,6 +307,7 @@ def me(user_id: UUID = Depends(current_user_id)):
         "id": user["id"],
         "email": user["email"],
         "display_name": user.get("display_name"),
+        "profile_picture_url": user.get("profile_picture_url"),
         "gmail_connected": user.get("gmail_tokens") is not None and not expired,
         "expired": expired,
     }

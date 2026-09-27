@@ -90,6 +90,11 @@ export default function Home() {
   const visibleTransactions = sortedTransactions.filter((item) => !searchQuery.trim() ||
     [item.merchant, item.category, item.amount, item.description, item.source].some((value) => String(value ?? "").toLowerCase().includes(searchQuery.trim().toLowerCase()))
   );
+  const datedTransactions = Object.entries(visibleTransactions.reduce<Record<string, Transaction[]>>((groups, item) => {
+    const date = item.transaction_date.slice(0, 10);
+    (groups[date] ??= []).push(item);
+    return groups;
+  }, {})).sort(([left], [right]) => right.localeCompare(left));
 
   const openSheet = (next: typeof sheet) => { setQuickOpen(false); setSheet(next); };
   const refresh = async () => {
@@ -140,36 +145,40 @@ export default function Home() {
 
   return <AuthGate user={user} loading={loading}><main className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-[#111112] px-5 pb-28 pt-[calc(2rem+env(safe-area-inset-top))]">
     <header className="mb-5 flex items-center justify-between">
-      <h1 className="text-[13px] font-semibold">Welcome, {welcomeName(user?.email ?? "")}</h1>
+      <h1 className="text-[18px] font-semibold">Welcome, {welcomeName(user?.email ?? "")}</h1>
       <ProfileMenu user={user} onChange={setUser} />
     </header>
 
-    <section className="relative h-[186px] overflow-visible rounded-[20px] bg-cover bg-center px-4 py-4 shadow-[0_12px_28px_rgba(0,0,0,.3)]" style={{ backgroundImage: "url('/image%201.svg')" }} aria-label="Balance summary">
+    <section className="relative h-[210px] overflow-visible rounded-[20px] bg-cover bg-center px-4 py-4 shadow-[0_12px_28px_rgba(0,0,0,.3)]" style={{ backgroundImage: "url('/image%201.svg')" }} aria-label="Balance summary">
       <div className="relative">
-        <button type="button" aria-expanded={sourceOpen} onClick={() => setSourceOpen((value) => !value)} className="flex items-center gap-1 text-[11px] text-white/90">{selectedSource?.source_name ?? "Overall"} <ChevronDown size={12} /></button>
-        {sourceOpen && <div className="absolute left-0 top-6 z-20 min-w-36 rounded-xl border border-white/15 bg-[#29252e] p-1 shadow-xl">
-          <button type="button" onClick={() => { setSourceId("overall"); setSourceOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-white/10">Overall</button>
-          {ownedSources.map((source) => <button type="button" key={source.id} onClick={() => { setSourceId(source.id); setSourceOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-white/10">{source.source_name}</button>)}
+        <button type="button" aria-expanded={sourceOpen} onClick={() => setSourceOpen((value) => !value)} className="flex items-center gap-1 text-[15px] font-medium text-white/90">{selectedSource?.source_name ?? "Overall"} <ChevronDown size={16} /></button>
+        {sourceOpen && <div className="absolute left-0 top-7 z-20 min-w-36 rounded-xl border border-white/15 bg-[#29252e] p-1 shadow-xl">
+          <button type="button" onClick={() => { setSourceId("overall"); setSourceOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-[15px] hover:bg-white/10">Overall</button>
+          {ownedSources.map((source) => <button type="button" key={source.id} onClick={() => { setSourceId(source.id); setSourceOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-[15px] hover:bg-white/10">{source.source_name}</button>)}
         </div>}
       </div>
-      <div className="absolute inset-x-0 top-[72px] text-center text-[28px] font-semibold tracking-tight">{money(balance)}</div>
-      <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 text-[10px]">
-        <span>Incoming: <strong className="text-(--green)">{money(incoming)}</strong></span>
-        <span>Outgoing: <strong className="text-(--red)">{money(outgoing)}</strong></span>
+      <div className="absolute inset-x-0 top-[70px] text-center text-[36px] font-semibold tracking-tight">{money(balance)}</div>
+      <div className="absolute inset-x-4 bottom-3 grid grid-cols-2 gap-3">
+        <span className="min-w-0 text-[14px]">Incoming:<strong className="block truncate text-[17px] text-(--green)">{money(incoming)}</strong></span>
+        <span className="min-w-0 text-right text-[14px]">Outgoing:<strong className="block truncate text-[17px] text-(--red)">{money(outgoing)}</strong></span>
       </div>
     </section>
 
     <section className={"mt-6 transition-[filter,opacity] duration-300 " + (quickOpen ? "pointer-events-none blur-[3px] opacity-65" : "")}>
-      <div className="mb-3 flex items-center justify-between"><h2 className="text-[15px] font-semibold">Recent Transaction</h2><div className="flex gap-1">
-        <button type="button" aria-label="Search transactions" onClick={() => setSearchOpen((value) => !value)} className="rounded-full p-2 text-white/55"><Search size={16} /></button>
-        <button type="button" aria-label="Refresh transactions" onClick={() => void refresh()} disabled={refreshing} className="rounded-full p-2 text-white/55 disabled:opacity-40"><RefreshCw size={16} className={refreshing ? "animate-spin" : ""} /></button>
+      <div className="mb-3 flex items-center justify-between"><h2 className="text-[20px] font-semibold">Recent Transactions</h2><div className="flex gap-1">
+        <button type="button" aria-label="Search transactions" onClick={() => setSearchOpen((value) => !value)} className="rounded-full p-2 text-white/55"><Search size={20} /></button>
+        <button type="button" aria-label="Refresh transactions" onClick={() => void refresh()} disabled={refreshing} className="rounded-full p-2 text-white/55 disabled:opacity-40"><RefreshCw size={20} className={refreshing ? "animate-spin" : ""} /></button>
       </div></div>
-      {searchOpen && <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" className="finance-field mb-3" />}
-      <div className="space-y-1">{visibleTransactions.map((item) => <TransactionCard key={item.id} transaction={item} groupColor={item.group_id ? groupColor(item.group_id) : undefined}
-        onDetail={() => { setSelected(item); openSheet("detail"); }}
-        onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 168) })}
-      />)}</div>
-      {visibleTransactions.length === 0 && <p className="py-12 text-center text-xs text-white/45">No transactions yet.</p>}
+      {searchOpen && <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" className="finance-field mb-3" style={{ fontSize: 16 }} />}
+      <div>{datedTransactions.map(([date, items], index) => <section key={date} className={index < datedTransactions.length - 1 ? "mb-4 border-b border-white/15 pb-4" : ""}>
+        <div className="mb-2 flex items-center gap-3"><h3 className="shrink-0 text-[15px] font-semibold text-white/75">{new Date(date + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</h3><span className="h-px flex-1 bg-white/10" /></div>
+        <div className="space-y-1">{items.map((item) => <TransactionCard key={item.id} transaction={item} groupColor={item.group_id ? groupColor(item.group_id) : undefined}
+          onDetail={() => { setSelected(item); openSheet("detail"); }}
+          onCategory={() => { setSelected(item); openSheet("category"); }}
+          onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 168) })}
+        />)}</div>
+      </section>)}</div>
+      {visibleTransactions.length === 0 && <p className="py-12 text-center text-[16px] text-white/45">No transactions yet.</p>}
     </section>
 
     <BottomNav />
@@ -177,7 +186,7 @@ export default function Home() {
     <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-5 z-30 flex flex-col items-end gap-2">
       {quickOpen && <div className="mb-1 flex flex-col items-end gap-2">
         {[{ label: "Group", target: "group" as const, delay: 140 }, { label: "Category", target: "category" as const, delay: 70 }, { label: "Transaction", target: "add" as const, delay: 0 }].map((action) =>
-          <button key={action.target} type="button" onClick={() => { setSelected(null); openSheet(action.target); }} className="quick-action min-w-24 rounded-full bg-[#e5e5e5] px-4 py-2 text-center text-xs font-medium text-black shadow-lg" style={{ animationDelay: action.delay + "ms" }}>{action.label}</button>
+          <button key={action.target} type="button" onClick={() => { setSelected(null); openSheet(action.target); }} className="quick-action min-w-24 rounded-full bg-[#e5e5e5] px-4 py-2 text-center text-[15px] font-medium text-black shadow-lg" style={{ animationDelay: action.delay + "ms" }}>{action.label}</button>
         )}
       </div>}
       <button type="button" aria-label={quickOpen ? "Close add menu" : "Open add menu"} aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)} className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e5e5] text-black shadow-lg transition-transform duration-200 active:scale-95">{quickOpen ? <ArrowUp size={24} /> : <Plus size={27} />}</button>
