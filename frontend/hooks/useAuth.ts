@@ -8,10 +8,21 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    void checkSession().then((nextUser) => {
-      setUser(nextUser);
-      setLoading(false);
+    let active = true;
+    const refresh = () => void checkSession().then((nextUser) => {
+      if (active) { setUser(nextUser); setLoading(false); }
     });
+    refresh();
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
   return { user, setUser, loading };
 }

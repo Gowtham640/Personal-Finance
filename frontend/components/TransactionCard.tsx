@@ -1,37 +1,50 @@
 "use client";
 
-import { createElement } from "react";
-import { useRef, type PointerEvent } from "react";
-import { FileText } from "lucide-react";
+import { createElement, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { Transaction } from "../lib/types";
 import { categoryIcon } from "../lib/categories";
 
-export function TransactionCard({ transaction, groupColor, onCategory, onDetail, onLongPress, onNote }: { transaction: Transaction; groupColor?: string; onCategory: () => void; onDetail: () => void; onLongPress: (position: { x: number; y: number }) => void; onNote: () => void }) {
+export function TransactionCard({ transaction, groupColor, onDetail, onLongPress }: {
+  transaction: Transaction;
+  groupColor?: string;
+  onDetail: () => void;
+  onLongPress: (position: { x: number; y: number }) => void;
+}) {
   const credit = transaction.type === "credit";
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
+  const [wave, setWave] = useState<{ x: number; y: number; key: number } | null>(null);
+  useEffect(() => () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    if (openTimer.current) clearTimeout(openTimer.current);
+  }, []);
   const clearPress = () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
   };
-  const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     longPressed.current = false;
-    timer.current = setTimeout(() => {
+    const point = { x: event.clientX, y: event.clientY };
+    pressTimer.current = setTimeout(() => {
       longPressed.current = true;
-      onLongPress({ x: event.clientX, y: event.clientY });
+      onLongPress(point);
     }, 550);
   };
-  const handleClick = () => {
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (longPressed.current) {
       longPressed.current = false;
       return;
     }
-    onDetail();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setWave({ x: event.clientX ? event.clientX - bounds.left : bounds.width / 2, y: event.clientY ? event.clientY - bounds.top : bounds.height / 2, key: Date.now() });
+    openTimer.current = setTimeout(onDetail, 520);
   };
-  return <article onClick={handleClick} onPointerDown={handlePointerDown} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} className={`glass relative overflow-hidden rounded-3xl p-4 transition-transform duration-150 active:scale-[0.98] ${transaction.excludedFromCashFlow ? "opacity-50" : ""}`}>
-    {groupColor && <span aria-label="Grouped transaction" className="pointer-events-none absolute right-0 top-0 h-8 w-8" style={{ backgroundColor: groupColor, clipPath: "polygon(100% 0, 100% 100%, 0 0)" }} />}
-    <div className="flex items-center justify-between gap-3 text-sm"><div><span className="text-[#8E8E93]">{credit ? "From:" : "To:"}</span> <span className="font-medium">{transaction.merchant || "Unknown"}</span></div><button type="button" aria-label="Add transaction note" onClick={(event) => { event.stopPropagation(); onNote(); }} className="rounded-full p-1.5 text-[#8E8E93] hover:bg-white/10"><FileText size={16} /></button></div>
-    <div className="my-3 border-t border-white/10" />
-    <div className="flex items-center justify-between gap-4"><strong className={`text-xl ${credit ? "text-[#30D158]" : "text-(--red)"}`}>{credit ? "+" : "−"}₹{transaction.amount.toLocaleString("en-IN")}</strong><button onClick={(event) => { event.stopPropagation(); onCategory(); }} className="flex w-fit items-center gap-2 rounded-full bg-[rgba(58,58,60,0.7)] px-3 py-2 text-xs text-white">{createElement(categoryIcon(transaction.category), { size: 15 })}{transaction.category || "Other"}</button></div>
-  </article>;
+  return <button type="button" onClick={handleClick} onPointerDown={handlePointerDown} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => event.preventDefault()} className={`relative flex w-full items-center gap-3 overflow-hidden rounded-2xl px-1 py-2.5 text-left active:scale-[0.99] ${transaction.excludedFromCashFlow ? "opacity-50" : ""}`}>
+    {groupColor && <span aria-label="Grouped transaction" className="pointer-events-none absolute right-0 top-0 h-6 w-6" style={{ backgroundColor: groupColor, clipPath: "polygon(100% 0, 100% 100%, 0 0)" }} />}
+    {wave && <span key={wave.key} className="transaction-wave" style={{ left: wave.x, top: wave.y }} />}
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#3b3b3d] text-[#d9d9d9]">{createElement(categoryIcon(transaction.category), { size: 20 })}</span>
+    <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-white">{transaction.merchant || "Unknown"}</span><span className="block truncate text-[10px] text-[#8e8e93]">{transaction.category || "Other"}</span></span>
+    <strong className={`relative z-10 shrink-0 text-[13px] font-semibold ${credit ? "text-(--green)" : "text-(--red)"}`}>₹ {Number(transaction.amount).toLocaleString("en-IN")}</strong>
+  </button>;
 }

@@ -39,6 +39,18 @@ export type Group = {
   name: string;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+  sync_status: SyncStatus;
+};
+
+export type CategoryRecord = {
+  id: string;
+  user_id: string;
+  name: string;
+  type: TransactionType;
+  icon_key: string;
+  deleted_at: string | null;
+  updated_at: string;
   sync_status: SyncStatus;
 };
 
@@ -50,4 +62,4 @@ export type BalanceHistory = {
   email_timestamp?: string | null;
 };
 
-export type User = { id: string; email: string; display_name: string | null };
+export type User = { id: string; email: string; display_name: string | null; gmail_connected?: boolean; expired?: boolean };

@@ -15,6 +15,9 @@ class User(BaseModel):
     email: str
     display_name: str | None = None
     gmail_tokens: dict[str, Any] | None = None
+    gmail_connected_at: datetime | None = None
+    gmail_expires_at: datetime | None = None
+    expired: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -62,6 +65,7 @@ class SyncRequest(BaseModel):
     transactions: list[dict[str, Any]] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     groups: list[dict[str, Any]] = Field(default_factory=list)
+    categories: list[dict[str, Any]] = Field(default_factory=list)
     category_mappings: dict[str, str] = Field(default_factory=dict)
 
 

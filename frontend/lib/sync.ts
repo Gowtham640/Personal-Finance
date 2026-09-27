@@ -1,6 +1,7 @@
 import {
   listBalanceHistory,
   listCategoryMappings,
+  listCategories,
   listGroups,
   listSources,
   listTransactions,
@@ -36,6 +37,7 @@ type SyncResponse = {
   transactions: Transaction[];
   sources: Source[];
   groups?: Group[];
+  categories?: import("./types").CategoryRecord[];
   category_mappings: Record<string, string>;
 };
 
@@ -46,11 +48,13 @@ export async function syncData() {
   const localTransactions = await listTransactions();
   const localSources = await listSources();
   const localGroups = await listGroups(user.id);
+  const localCategories = await listCategories(user.id);
   const localMappings = await listCategoryMappings(user.id);
   const state = await postJson<SyncResponse>("/api/sync", {
     transactions: localTransactions.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
     sources: localSources.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
     groups: localGroups.filter((item) => item.sync_status === "pending"),
+    categories: localCategories.filter((item) => item.sync_status === "pending"),
     category_mappings: Object.fromEntries(localMappings.map((item) => [item.merchant_key, item.category])),
   });
   if (state) {
@@ -81,6 +85,10 @@ export async function syncData() {
     await putMany(
       "groups",
       (state.groups ?? []).map((item) => ({ ...item, sync_status: "synced" as const })),
+    );
+    await putMany(
+      "categories",
+      (state.categories ?? []).map((item) => ({ ...item, sync_status: "synced" as const })),
     );
     await Promise.all(Object.entries(state.category_mappings).map(([merchantKey, category]) => putCategoryMapping({
       id: `${user.id}:${merchantKey}`,

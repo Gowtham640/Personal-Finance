@@ -1,4 +1,4 @@
-"""Persistent 30-minute Gmail scraper worker."""
+"""Persistent 5-minute Gmail scraper worker."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from gmail_client import (
     refresh_if_needed,
 )
 from main import db, settings
-from utils import backfill_balances
+from utils import backfill_balances, gmail_credential_expired
 
 load_dotenv()
 Path("logs").mkdir(exist_ok=True)
@@ -55,7 +55,7 @@ def refresh_user_token(user: dict) -> dict:
 
 
 def clear_invalid_token(user_id: str, error: Exception) -> None:
-    db.table("fin_users").update({"gmail_tokens": None}).eq("id", user_id).execute()
+    db.table("fin_users").update({"gmail_tokens": None, "expired": True}).eq("id", user_id).execute()
     LOGGER.exception("Cleared invalid Gmail token for user %s", user_id, exc_info=error)
 
 
@@ -304,12 +304,16 @@ def run_cycle() -> None:
     LOGGER.info("Starting Gmail scrape cycle")
     users = (
         db.table("fin_users")
-        .select("id,email,gmail_tokens")
+        .select("id,email,gmail_tokens,gmail_expires_at,expired")
         .not_.is_("gmail_tokens", "null")
         .execute()
         .data
     )
     for user in users:
+        if gmail_credential_expired(user):
+            if not user.get("expired"):
+                db.table("fin_users").update({"expired": True}).eq("id", user["id"]).execute()
+            continue
         try:
             scrape_user(user)
         except Exception:
@@ -319,7 +323,7 @@ def run_cycle() -> None:
 
 def main() -> None:
     scheduler = BackgroundScheduler(timezone="UTC")
-    scheduler.add_job(run_cycle, "interval", minutes=30, id="gmail-scrape", max_instances=1, coalesce=True)
+    scheduler.add_job(run_cycle, "interval", minutes=5, id="gmail-scrape", max_instances=1, coalesce=True)
     scheduler.start()
     run_cycle()
     LOGGER.info("Scraper worker started")

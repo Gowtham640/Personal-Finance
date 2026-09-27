@@ -1,8 +1,10 @@
 "use client";
 
 import { LogIn, LoaderCircle } from "lucide-react";
+import { useState } from "react";
 import { googleSignInUrl } from "../lib/auth";
 import { User } from "../lib/types";
+import { Sheet } from "./Sheet";
 
 export function AuthGate({
   user,
@@ -13,6 +15,7 @@ export function AuthGate({
   loading: boolean;
   children: React.ReactNode;
 }) {
+  const [dismissedExpiry, setDismissedExpiry] = useState(false);
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -41,5 +44,8 @@ export function AuthGate({
     );
   }
 
-  return children;
+  return <>{children}{user.expired && !dismissedExpiry && <Sheet title="Gmail connection expired" onClose={() => setDismissedExpiry(true)}>
+    <p className="text-center text-xs leading-5 text-white/75">Your Gmail connection is over five days old. Please sign in again to resume importing transactions.</p>
+    <a href={googleSignInUrl} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-semibold text-black"><LogIn size={16} />Sign in again</a>
+  </Sheet>}</>;
 }

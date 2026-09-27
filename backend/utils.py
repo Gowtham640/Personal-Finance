@@ -8,11 +8,32 @@ import hmac
 import json
 import secrets
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from typing import Any
 from uuid import UUID
+
+
+GMAIL_CREDENTIAL_LIFETIME = timedelta(days=5)
+
+
+def gmail_credential_expires_at(connected_at: datetime) -> datetime:
+    return connected_at.astimezone(timezone.utc) + GMAIL_CREDENTIAL_LIFETIME
+
+
+def gmail_credential_expired(user: dict[str, Any], now: datetime | None = None) -> bool:
+    if user.get("expired"):
+        return True
+    if not user.get("gmail_tokens"):
+        return False
+    value = user.get("gmail_expires_at")
+    if not value:
+        return True
+    expiry = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    return expiry <= (now or datetime.now(timezone.utc))
 
 
 def new_state() -> str:

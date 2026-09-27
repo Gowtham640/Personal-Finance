@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from utils import backfill_balances, sign_session, verify_session
+from utils import backfill_balances, gmail_credential_expired, gmail_credential_expires_at, sign_session, verify_session
 
 
 def test_session_round_trip_and_tamper_detection():
@@ -24,3 +24,16 @@ def test_backfill_balance_applies_credit_and_debit_in_date_order():
         ("credit", Decimal("125.00")),
         ("debit", Decimal("115.00")),
     ]
+
+
+def test_gmail_credential_expires_five_days_after_consent_not_refresh():
+    connected_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    user = {
+        "gmail_tokens": {"access_token": "test"},
+        "gmail_expires_at": gmail_credential_expires_at(connected_at).isoformat(),
+        "expired": False,
+    }
+    assert not gmail_credential_expired(user, connected_at + timedelta(days=4))
+    assert gmail_credential_expired(user, connected_at + timedelta(days=5))
+    user["expired"] = True
+    assert gmail_credential_expired(user, connected_at)

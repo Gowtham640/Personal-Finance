@@ -23,7 +23,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
   const [flow, setFlow] = useState<"debit" | "credit">("debit");
   const [categoryFlow, setCategoryFlow] = useState<"debit" | "credit">("debit");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(groups[0]?.id ?? null);
-  const colors = ["#30D158", "#FFFFFF", "#8E8E93", "#FF453A", "#A5F3B7", "#D1D1D6"];
+  const colors = ["#88FA9F", "#FFFFFF", "#8E8E93", "#FA8888", "#A5F3B7", "#D1D1D6"];
   const byDay = useMemo(() => Object.entries(transactions.filter((item) => item.type === flow).reduce<Record<string, number>>((acc, item) => {
     const key = item.transaction_date.slice(0, 10);
     acc[key] = (acc[key] ?? 0) + Number(item.amount);
@@ -70,7 +70,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
               <XAxis dataKey="date" tickFormatter={dateLabel} tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => dateLabel(String(label))} formatter={tooltipAmount} />
-              <Line type="monotone" dataKey="amount" stroke={flow === "debit" ? "#FF453A" : "#30D158"} strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="amount" stroke={flow === "debit" ? "#FA8888" : "#88FA9F"} strokeWidth={3} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -107,8 +107,8 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
                 <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
                 <Tooltip contentStyle={tooltipStyle} formatter={tooltipAmount} />
-                <Bar dataKey="income" fill="#30D158" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="expense" fill="#FF453A" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="income" fill="#88FA9F" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="expense" fill="#FA8888" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -118,7 +118,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
             <div className="mt-4 h-56">
               <ResponsiveContainer>
                 <PieChart>
-                  <Pie data={selectedGroupBreakdown} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{selectedGroupBreakdown.map((entry, index) => <Cell key={entry.name} fill={index === 0 ? "#FF453A" : "#30D158"} />)}</Pie>
+                  <Pie data={selectedGroupBreakdown} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{selectedGroupBreakdown.map((entry, index) => <Cell key={entry.name} fill={index === 0 ? "#FA8888" : "#88FA9F"} />)}</Pie>
                   <Tooltip contentStyle={tooltipStyle} formatter={tooltipAmount} />
                 </PieChart>
               </ResponsiveContainer>
@@ -135,8 +135,8 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
               <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
               <Tooltip contentStyle={tooltipStyle} formatter={tooltipAmount} />
-              <Bar dataKey="income" fill="#30D158" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="expense" fill="#FF453A" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="income" fill="#88FA9F" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="expense" fill="#FA8888" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

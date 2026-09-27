@@ -1,88 +1,56 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { useSheetDraft } from "../hooks/useSheetDraft";
 import { Group } from "../lib/types";
 import { Sheet } from "./Sheet";
 
 export function GroupPickerSheet({
-  groups,
-  currentGroupId,
-  onSelect,
-  onCreate,
-  onClose,
+  groups, currentGroupId = null, onSelect, onCreate, onRename, onDelete, onClose,
 }: {
   groups: Group[];
-  currentGroupId: string | null;
-  onSelect: (groupId: string | null) => void;
+  currentGroupId?: string | null;
+  onSelect?: (groupId: string | null) => void;
   onCreate: (name: string) => Promise<Group | null>;
+  onRename?: (group: Group, name: string) => Promise<boolean>;
+  onDelete?: (group: Group) => Promise<void>;
   onClose: () => void;
 }) {
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName, clearName] = useSheetDraft("group-name", "");
+  const [editing, setEditing, clearEditing] = useSheetDraft<Group | null>("group-editing", null);
   const [saving, setSaving] = useState(false);
-
-  const saveGroup = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName || saving) return;
+  const [error, setError] = useState("");
+  const save = async () => {
+    if (!name.trim() || saving) return;
     setSaving(true);
-    const group = await onCreate(trimmedName);
-    setSaving(false);
-    if (group) {
-      onSelect(group.id);
-      onClose();
+    if (editing) {
+      if (await onRename?.(editing, name)) { setEditing(null); clearEditing(); setName(""); clearName(); setError(""); }
+      else setError("Choose a different group name.");
+    } else {
+      const group = await onCreate(name);
+      if (group) {
+        setName(""); clearName(); setError("");
+        if (onSelect) { onSelect(group.id); onClose(); }
+      } else setError("Could not create group.");
     }
+    setSaving(false);
   };
-
-  if (creating) {
-    return (
-      <Sheet title="Create group" onClose={onClose}>
-        <button type="button" onClick={() => setCreating(false)} className="mb-5 flex items-center gap-2 text-sm text-[#8E8E93]">
-          <ArrowLeft size={16} /> Back to groups
-        </button>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Group name"
-          autoFocus
-          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-white/30"
-        />
-        <button type="button" onClick={() => void saveGroup()} disabled={!name.trim() || saving} className="mt-4 w-full rounded-2xl bg-white px-4 py-3 font-semibold text-black disabled:opacity-40">
-          Done
-        </button>
-      </Sheet>
-    );
-  }
-
-  return (
-    <Sheet title="Add to group" onClose={onClose}>
-      <div className="space-y-2">
-        {groups.map((group) => (
-          <button
-            type="button"
-            key={group.id}
-            onClick={() => {
-              onSelect(group.id);
-              onClose();
-            }}
-            className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm ${group.id === currentGroupId ? "bg-white text-black" : "bg-white/5 text-white hover:bg-white/10"}`}
-          >
-            <span>{group.name}</span>
-            {group.id === currentGroupId && <span className="text-xs font-semibold">Selected</span>}
-          </button>
-        ))}
-        <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 rounded-2xl border border-dashed border-white/20 px-4 py-3 text-left text-sm text-[#8E8E93] hover:bg-white/5">
-          <Plus size={16} /> Create new group
-        </button>
-        {currentGroupId && (
-          <button type="button" onClick={() => { onSelect(null); onClose(); }} className="w-full rounded-2xl px-4 py-3 text-left text-sm text-[#FF9F0A] hover:bg-white/5">
-            Remove from group
-          </button>
-        )}
-      </div>
-      <button type="button" onClick={onClose} className="mt-5 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white">
-        Done
-      </button>
-    </Sheet>
-  );
+  const cancel = () => { clearName(); clearEditing(); onClose(); };
+  return <Sheet title={onSelect ? "Add to group" : "Groups"} onClose={onClose} onCancel={cancel}>
+    <div className="max-h-[45dvh] space-y-1 overflow-y-auto">
+      {groups.map((group) => <div key={group.id} className="flex items-center gap-1 rounded-xl bg-white/5 px-2 py-1">
+        <button type="button" onClick={() => { if (onSelect) { onSelect(group.id); onClose(); } else { setEditing(group); setName(group.name); } }} className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs">{group.name}{group.id === currentGroupId && <span className="ml-2 text-white/50">Selected</span>}</button>
+        {onRename && <button type="button" aria-label={`Rename ${group.name}`} onClick={() => { setEditing(group); setName(group.name); }} className="p-2 text-white/50"><Pencil size={15} /></button>}
+        {onDelete && <button type="button" aria-label={`Delete ${group.name}`} onClick={() => void onDelete(group)} className="p-2 text-(--red)"><Trash2 size={15} /></button>}
+      </div>)}
+      {currentGroupId && onSelect && <button type="button" onClick={() => { onSelect(null); onClose(); }} className="px-4 py-2 text-xs text-white/60">Remove from group</button>}
+    </div>
+    <div className="mt-4 flex gap-2 border-t border-white/10 pt-4">
+      <input value={name} onChange={(event) => setName(event.target.value)} placeholder={editing ? "Rename group" : "New group"} className="finance-field" />
+      <button type="button" aria-label={editing ? "Save group" : "Add group"} disabled={!name.trim() || saving} onClick={() => void save()} className="rounded-lg bg-white px-3 text-black disabled:opacity-40">{editing ? <Check size={17} /> : <Plus size={17} />}</button>
+    </div>
+    {editing && <button type="button" onClick={() => { setEditing(null); clearEditing(); setName(""); clearName(); }} className="mt-2 text-xs text-white/50">Cancel edit</button>}
+    {error && <p role="alert" className="mt-3 text-xs text-(--red)">{error}</p>}
+  </Sheet>;
 }

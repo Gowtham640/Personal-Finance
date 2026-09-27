@@ -16,10 +16,11 @@ from fastapi.responses import RedirectResponse
 from google.oauth2 import id_token
 from google.auth.transport.requests import Request as GoogleRequest
 from supabase import Client, create_client
+from supabase.client import ClientOptions
 
 from gmail_client import oauth_flow, tokens_from_credentials
 from models import SyncRequest
-from utils import sign_session, verify_session
+from utils import gmail_credential_expired, gmail_credential_expires_at, sign_session, verify_session
 
 load_dotenv()
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -65,7 +66,11 @@ class Settings:
 
 
 settings = Settings.from_env()
-db: Client = create_client(settings.supabase_url, settings.service_role_key)
+db: Client = create_client(
+    settings.supabase_url,
+    settings.service_role_key,
+    options=ClientOptions(schema="Personal Finance"),
+)
 app = FastAPI(title="Finance Backend", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -171,6 +176,7 @@ def google_callback(
         if not email:
             raise ValueError("Google did not return an email address")
         tokens = tokens_from_credentials(flow.credentials)
+        connected_at = datetime.now(timezone.utc)
         result = (
             db.table("fin_users")
             .upsert(
@@ -178,6 +184,9 @@ def google_callback(
                     "email": email,
                     "display_name": claims.get("name"),
                     "gmail_tokens": tokens,
+                    "gmail_connected_at": connected_at.isoformat(),
+                    "gmail_expires_at": gmail_credential_expires_at(connected_at).isoformat(),
+                    "expired": False,
                 },
                 on_conflict="email",
             )
@@ -226,6 +235,9 @@ def serialize_source(row: dict) -> dict:
 def serialize_group(row: dict) -> dict:
     return {**row, "sync_status": "synced"}
 
+def serialize_category(row: dict) -> dict:
+    return {**row, "sync_status": "synced"}
+
 
 def current_sync_state(user_id: UUID) -> dict:
     user_key = str(user_id)
@@ -251,6 +263,13 @@ def current_sync_state(user_id: UUID) -> dict:
         .order("updated_at", desc=True)
         .execute()
     )
+    categories = (
+        db.table("fin_categories")
+        .select("*")
+        .eq("user_id", user_key)
+        .order("updated_at", desc=True)
+        .execute()
+    )
     mappings = (
         db.table("fin_category_mappings")
         .select("merchant_key,category")
@@ -261,6 +280,7 @@ def current_sync_state(user_id: UUID) -> dict:
         "transactions": [serialize_transaction(row) for row in transactions.data],
         "sources": [serialize_source(row) for row in sources.data],
         "groups": [serialize_group(row) for row in groups.data],
+        "categories": [serialize_category(row) for row in categories.data],
         "category_mappings": {
             row["merchant_key"]: row["category"] for row in mappings.data
         },
@@ -271,7 +291,7 @@ def current_sync_state(user_id: UUID) -> dict:
 def me(user_id: UUID = Depends(current_user_id)):
     result = (
         db.table("fin_users")
-        .select("id,email,display_name,gmail_tokens")
+        .select("id,email,display_name,gmail_tokens,gmail_expires_at,expired")
         .eq("id", str(user_id))
         .single()
         .execute()
@@ -279,11 +299,15 @@ def me(user_id: UUID = Depends(current_user_id)):
     if not result.data:
         raise HTTPException(status_code=404, detail="User not found")
     user = result.data
+    expired = gmail_credential_expired(user)
+    if expired and not user.get("expired"):
+        db.table("fin_users").update({"expired": True}).eq("id", str(user_id)).execute()
     return {
         "id": user["id"],
         "email": user["email"],
         "display_name": user.get("display_name"),
-        "gmail_connected": user.get("gmail_tokens") is not None,
+        "gmail_connected": user.get("gmail_tokens") is not None and not expired,
+        "expired": expired,
     }
 
 
@@ -306,6 +330,11 @@ def transactions(
 @app.post("/api/sync")
 def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
     user_key = str(user_id)
+    incoming_group_ids = [row["id"] for row in payload.groups]
+    if incoming_group_ids:
+        owners = db.table("fin_groups").select("id,user_id").in_("id", incoming_group_ids).execute()
+        if any(row["user_id"] != user_key for row in owners.data):
+            raise HTTPException(status_code=403, detail="Group belongs to another user")
     group_rows = []
     for row in payload.groups:
         group_rows.append(
@@ -315,17 +344,42 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
                 "name": row["name"],
                 "created_at": row.get("created_at"),
                 "updated_at": row.get("updated_at"),
+                "deleted_at": row.get("deleted_at"),
             }
         )
     if group_rows:
         db.table("fin_groups").upsert(group_rows, on_conflict="id").execute()
     existing_groups = (
         db.table("fin_groups")
-        .select("id")
+        .select("id,deleted_at")
         .eq("user_id", user_key)
         .execute()
     )
-    allowed_group_ids = {row["id"] for row in existing_groups.data}
+    allowed_group_ids = {row["id"] for row in existing_groups.data if not row.get("deleted_at")}
+    deleted_group_ids = [row["id"] for row in group_rows if row.get("deleted_at")]
+    for group_id in deleted_group_ids:
+        db.table("fin_transactions").update({"group_id": None}).eq("user_id", user_key).eq("group_id", group_id).execute()
+
+    incoming_category_ids = [row["id"] for row in payload.categories]
+    if incoming_category_ids:
+        owners = db.table("fin_categories").select("id,user_id").in_("id", incoming_category_ids).execute()
+        if any(row["user_id"] != user_key for row in owners.data):
+            raise HTTPException(status_code=403, detail="Category belongs to another user")
+    category_rows = []
+    for row in payload.categories:
+        if row.get("type") not in ("credit", "debit") or not str(row.get("name", "")).strip():
+            raise HTTPException(status_code=422, detail="Invalid category")
+        category_rows.append({
+            "id": row["id"],
+            "user_id": user_key,
+            "name": str(row["name"]).strip(),
+            "type": row["type"],
+            "icon_key": row.get("icon_key") or "other",
+            "deleted_at": row.get("deleted_at"),
+            "updated_at": row["updated_at"],
+        })
+    if category_rows:
+        db.table("fin_categories").upsert(category_rows, on_conflict="id").execute()
 
     transaction_rows = []
     for row in payload.transactions:
