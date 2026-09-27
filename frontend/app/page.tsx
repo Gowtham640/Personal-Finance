@@ -53,6 +53,7 @@ export default function Home() {
   const { groups, create: createGroup, rename: renameGroup, remove: removeGroup } = useGroups(user?.id);
   const { categories, create: createCategory, rename: renameCategory, remove: removeCategory } = useCategories(user?.id);
   const { transactions, update } = useTransactions();
+  const categoryIconKeys = useMemo(() => new Map(categories.map((item) => [`${item.type}:${item.name.toLowerCase()}`, item.icon_key])), [categories]);
 
   useEffect(() => {
     if (!user) return;
@@ -170,9 +171,9 @@ export default function Home() {
         <button type="button" aria-label="Refresh transactions" onClick={() => void refresh()} disabled={refreshing} className="rounded-full p-2 text-white/55 disabled:opacity-40"><RefreshCw size={20} className={refreshing ? "animate-spin" : ""} /></button>
       </div></div>
       {searchOpen && <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" className="finance-field mb-3" style={{ fontSize: 16 }} />}
-      <div>{datedTransactions.map(([date, items], index) => <section key={date} className={index < datedTransactions.length - 1 ? "mb-4 border-b border-white/15 pb-4" : ""}>
-        <div className="mb-2 flex items-center gap-3"><h3 className="shrink-0 text-[15px] font-semibold text-white/75">{new Date(date + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</h3><span className="h-px flex-1 bg-white/10" /></div>
-        <div className="space-y-1">{items.map((item) => <TransactionCard key={item.id} transaction={item} groupColor={item.group_id ? groupColor(item.group_id) : undefined}
+      <div>{datedTransactions.map(([date, items], index) => <section key={date} className={index < datedTransactions.length - 1 ? "mb-4" : ""}>
+        <h3 className="mb-2 text-[12px] font-normal text-[#8e8e93]">{new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</h3>
+        <div className="space-y-1">{items.map((item) => <TransactionCard key={item.id} transaction={item} iconKey={categoryIconKeys.get(`${item.type}:${item.category?.toLowerCase()}`)} groupColor={item.group_id ? groupColor(item.group_id) : undefined}
           onDetail={() => { setSelected(item); openSheet("detail"); }}
           onCategory={() => { setSelected(item); openSheet("category"); }}
           onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 168) })}

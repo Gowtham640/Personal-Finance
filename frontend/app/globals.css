@@ -29,11 +29,13 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--background);
   color: #fff;
-  font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Inter", sans-serif;
+  font-family: "SF Pro";
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 

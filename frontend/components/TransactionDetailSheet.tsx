@@ -25,8 +25,8 @@ export function TransactionDetailSheet({
   onSave: (transaction: Transaction) => Promise<void>;
   onClose: () => void;
   categories: CategoryRecord[];
-  onCreateCategory: (name: string, type: TransactionType) => Promise<boolean>;
-  onRenameCategory: (category: CategoryRecord, name: string) => Promise<boolean>;
+  onCreateCategory: (name: string, type: TransactionType, iconKey: string) => Promise<boolean>;
+  onRenameCategory: (category: CategoryRecord, name: string, iconKey: string) => Promise<boolean>;
   onDeleteCategory: (category: CategoryRecord) => Promise<void>;
 }) {
   const key = "edit-transaction-" + transaction.id + "-";

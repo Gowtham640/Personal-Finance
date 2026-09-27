@@ -26,8 +26,8 @@ export function AddTransactionSheet({
   onLearnCategory: (merchant: string, category: string) => void;
   onClose: () => void;
   categories: CategoryRecord[];
-  onCreateCategory: (name: string, type: TransactionType) => Promise<boolean>;
-  onRenameCategory: (category: CategoryRecord, name: string) => Promise<boolean>;
+  onCreateCategory: (name: string, type: TransactionType, iconKey: string) => Promise<boolean>;
+  onRenameCategory: (category: CategoryRecord, name: string, iconKey: string) => Promise<boolean>;
   onDeleteCategory: (category: CategoryRecord) => Promise<void>;
 }) {
   const [type, setType, clearType] = useSheetDraft<TransactionType>("add-transaction-type", "debit");
