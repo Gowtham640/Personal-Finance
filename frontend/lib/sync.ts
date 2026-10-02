@@ -135,6 +135,14 @@ async function ensureUpiSource(userId: string, history: import("./types").Balanc
   if (!latestSnapshot && existing) return;
   const snapshotTime = latestSnapshot ? recordTime(latestSnapshot.email_timestamp ?? latestSnapshot.snapshot_date) : 0;
   const transactions = await listTransactions();
+  const latestImportedTransactionTime = transactions
+    .filter((transaction) => transaction.user_id === userId && transaction.email_timestamp)
+    .reduce((latest, transaction) => Math.max(latest, recordTime(transaction.email_timestamp!)), 0);
+  const latestImportedRecordTime = Math.max(snapshotTime, latestImportedTransactionTime);
+
+  // A manual source edit is authoritative until Gmail imports newer financial data.
+  if (existing && recordTime(existing.updated_at) >= latestImportedRecordTime) return;
+
   const projectedBalance = (latestSnapshot ? Number(latestSnapshot.balance) || 0 : 0) + transactions
     .filter((transaction) => transaction.user_id === userId && !transaction.excludedFromCashFlow && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime)
     .reduce((balance, transaction) => {
