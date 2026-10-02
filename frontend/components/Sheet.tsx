@@ -68,8 +68,8 @@ export function Sheet({ title, onClose, onCancel, children }: {
       <div className="touch-none select-none pb-4" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
         <span className="mx-auto mb-2 block h-1 w-7 rounded-full bg-white/35" />
         <div className="relative flex min-h-6 items-center justify-center">
-          <h2 className="text-center text-sm font-medium">{title}</h2>
-          {onCancel && <button type="button" onClick={onCancel} className="absolute left-0 text-xs text-white/65">Cancel</button>}
+          <h2 className="text-center text-base font-medium">{title}</h2>
+          {onCancel && <button type="button" onClick={onCancel} className="absolute left-0 text-sm text-white/65">Cancel</button>}
         </div>
       </div>
       {children}

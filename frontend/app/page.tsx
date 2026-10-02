@@ -146,7 +146,7 @@ export default function Home() {
 
   return <AuthGate user={user} loading={loading}><main className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-[#111112] px-5 pb-28 pt-[calc(2rem+env(safe-area-inset-top))]">
     <header className="mb-5 flex items-center justify-between">
-      <h1 className="text-[18px] font-semibold">Welcome, {welcomeName(user?.email ?? "")}</h1>
+      <h1 className="text-[18px] font-semibold">Welcome, {user?.display_name?.trim() || welcomeName(user?.email ?? "")}</h1>
       <ProfileMenu user={user} onChange={setUser} />
     </header>
 

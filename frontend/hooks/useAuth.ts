@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { checkSession } from "../lib/auth";
+import { checkSession, getCachedUser } from "../lib/auth";
 import { User } from "../lib/types";
 
 export function useAuth() {
@@ -12,7 +12,13 @@ export function useAuth() {
     const refresh = () => void checkSession().then((nextUser) => {
       if (active) { setUser(nextUser); setLoading(false); }
     });
-    refresh();
+    void getCachedUser().then((cachedUser) => {
+      if (active && cachedUser) {
+        setUser(cachedUser);
+        setLoading(false);
+      }
+      refresh();
+    });
     const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
     window.addEventListener("online", refresh);
     document.addEventListener("visibilitychange", onVisible);

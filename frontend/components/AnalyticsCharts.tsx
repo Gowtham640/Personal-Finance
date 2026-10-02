@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bar, BarChart, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Group, Source, Transaction } from "../lib/types";
+import { Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Group, Transaction } from "../lib/types";
 
 function compactAmount(value: number) {
   if (value >= 10_000_000) return `${(value / 10_000_000).toFixed(value >= 100_000_000 ? 0 : 1).replace(/\.0$/, "")}Cr`;
@@ -19,7 +19,7 @@ function tooltipAmount(value: unknown) {
   return `₹${Number(value ?? 0).toLocaleString("en-IN")}`;
 }
 
-export function AnalyticsCharts({ transactions, sources, groups, onCategorySelect, onGroupSelect }: { transactions: Transaction[]; sources: Source[]; groups: Group[]; onCategorySelect: (category: string, type: "debit" | "credit") => void; onGroupSelect: (groupId: string) => void }) {
+export function AnalyticsCharts({ transactions, groups, onCategorySelect, onGroupSelect }: { transactions: Transaction[]; groups: Group[]; onCategorySelect: (category: string, type: "debit" | "credit") => void; onGroupSelect: (groupId: string) => void }) {
   const [flow, setFlow] = useState<"debit" | "credit">("debit");
   const [categoryFlow, setCategoryFlow] = useState<"debit" | "credit">("debit");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(groups[0]?.id ?? null);
@@ -34,11 +34,6 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
     acc[key] = (acc[key] ?? 0) + Number(item.amount);
     return acc;
   }, {})).map(([name, value]) => ({ name, value })).sort((left, right) => right.value - left.value), [categoryFlow, transactions]);
-  const bySource = useMemo(() => sources.map((source) => ({
-    name: source.source_name,
-    income: transactions.filter((item) => item.type === "credit" && item.source === source.source_name).reduce((sum, item) => sum + Number(item.amount), 0),
-    expense: transactions.filter((item) => item.type === "debit" && item.source === source.source_name).reduce((sum, item) => sum + Number(item.amount), 0),
-  })).filter((item) => item.income || item.expense), [sources, transactions]);
   const byGroup = useMemo(() => groups.map((group) => {
     const groupTransactions = transactions.filter((item) => item.group_id === group.id);
     return {
@@ -54,36 +49,38 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
     : [];
   const maximumCategory = byCategory[0]?.value || 1;
   const tooltipStyle = { background: "#2C2C2E", border: "1px solid rgba(255,255,255,.12)", borderRadius: 16, color: "#fff" };
+  const chartStyle = { outline: "none" };
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="glass rounded-3xl p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-semibold">{flow === "debit" ? "Spending" : "Income"} over time</h2>
-          <div className="flex rounded-full bg-black/20 p-1 text-xs">
-            <button type="button" onClick={() => setFlow("debit")} className={`rounded-full px-3 py-1.5 ${flow === "debit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Expense</button>
-            <button type="button" onClick={() => setFlow("credit")} className={`rounded-full px-3 py-1.5 ${flow === "credit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Income</button>
+        <h2 className="text-center font-semibold">Expense / Income</h2>
+        <div className="my-3 flex justify-center">
+          <div className="flex rounded-full bg-black/20 p-1 text-sm">
+            <button type="button" onClick={() => setFlow("debit")} className={`rounded-full px-4 py-2 ${flow === "debit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Expense</button>
+            <button type="button" onClick={() => setFlow("credit")} className={`rounded-full px-4 py-2 ${flow === "credit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Income</button>
           </div>
         </div>
-        <div className="h-56">
+        <div className="h-56 outline-none" style={chartStyle}>
           <ResponsiveContainer>
-            <LineChart data={byDay}>
+            <AreaChart data={byDay}>
               <XAxis dataKey="date" tickFormatter={dateLabel} tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => dateLabel(String(label))} formatter={tooltipAmount} />
-              <Line type="monotone" dataKey="amount" stroke={flow === "debit" ? "#FA8888" : "#88FA9F"} strokeWidth={3} dot={false} />
-            </LineChart>
+              <defs><linearGradient id={`flow-${flow}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={flow === "debit" ? "#FA8888" : "#88FA9F"} stopOpacity={0.5} /><stop offset="100%" stopColor={flow === "debit" ? "#FA8888" : "#88FA9F"} stopOpacity={0} /></linearGradient></defs>
+              <Area type="monotone" dataKey="amount" stroke={flow === "debit" ? "#FA8888" : "#88FA9F"} fill={`url(#flow-${flow})`} strokeWidth={3} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
       <div className="glass rounded-3xl p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-semibold">{categoryFlow === "debit" ? "Spending" : "Income"} by category</h2>
-          <div className="flex rounded-full bg-black/20 p-1 text-xs">
-            <button type="button" onClick={() => setCategoryFlow("debit")} className={`rounded-full px-3 py-1.5 ${categoryFlow === "debit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Expense</button>
-            <button type="button" onClick={() => setCategoryFlow("credit")} className={`rounded-full px-3 py-1.5 ${categoryFlow === "credit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Income</button>
+        <h2 className="text-center font-semibold">{categoryFlow === "debit" ? "Spending" : "Income"} by category</h2>
+        <div className="my-3 flex justify-center">
+          <div className="flex rounded-full bg-black/20 p-1 text-sm">
+            <button type="button" onClick={() => setCategoryFlow("debit")} className={`rounded-full px-4 py-2 ${categoryFlow === "debit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Expense</button>
+            <button type="button" onClick={() => setCategoryFlow("credit")} className={`rounded-full px-4 py-2 ${categoryFlow === "credit" ? "bg-white text-black" : "text-[#8E8E93]"}`}>Income</button>
           </div>
         </div>
-        <div className="mb-5 h-56">
+        <div className="mb-5 h-56 outline-none" style={chartStyle}>
           <ResponsiveContainer>
             <PieChart>
               <Pie data={byCategory} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{byCategory.map((entry, index) => <Cell key={entry.name} fill={colors[index % colors.length]} />)}</Pie>
@@ -101,7 +98,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
           <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
             {byGroup.map((group) => <button type="button" key={group.id} onClick={() => setSelectedGroupId(group.id)} className={`shrink-0 rounded-full px-4 py-2 text-sm ${selectedGroup?.id === group.id ? "bg-white text-black" : "bg-white/10 text-white"}`}>{group.name}</button>)}
           </div>
-          <div className="mb-6 h-64">
+          <div className="mb-6 h-64 outline-none" style={chartStyle}>
             <ResponsiveContainer>
               <BarChart data={byGroup} onClick={(state) => { const index = Number(state?.activeTooltipIndex); const item = Number.isInteger(index) ? byGroup[index] : undefined; if (item?.id) { setSelectedGroupId(item.id); onGroupSelect(item.id); } }}>
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
@@ -115,7 +112,7 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
           <div className="rounded-2xl bg-black/10 p-4">
             <h3 className="font-semibold">{selectedGroup?.name ?? "Group"} breakdown</h3>
             <p className="mt-1 text-sm text-[#8E8E93]">Net ₹{((selectedGroup?.income ?? 0) - (selectedGroup?.expense ?? 0)).toLocaleString("en-IN")}</p>
-            <div className="mt-4 h-56">
+            <div className="mt-4 h-56 outline-none" style={chartStyle}>
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={selectedGroupBreakdown} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{selectedGroupBreakdown.map((entry, index) => <Cell key={entry.name} fill={index === 0 ? "#FA8888" : "#88FA9F"} />)}</Pie>
@@ -126,20 +123,6 @@ export function AnalyticsCharts({ transactions, sources, groups, onCategorySelec
             <div className="flex justify-center gap-5 text-sm text-[#8E8E93]"><span>Spending ₹{(selectedGroup?.expense ?? 0).toLocaleString("en-IN")}</span><span>Income ₹{(selectedGroup?.income ?? 0).toLocaleString("en-IN")}</span></div>
           </div>
         </>}
-      </div>
-      <div className="glass rounded-3xl p-5 lg:col-span-2">
-        <h2 className="mb-4 font-semibold">Income and expense by source</h2>
-        <div className="h-64">
-          <ResponsiveContainer>
-            <BarChart data={bySource}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#8E8E93" tickLine={false} axisLine={false} />
-              <YAxis tickFormatter={compactAmount} stroke="#8E8E93" tickLine={false} axisLine={false} width={45} />
-              <Tooltip contentStyle={tooltipStyle} formatter={tooltipAmount} />
-              <Bar dataKey="income" fill="#88FA9F" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="expense" fill="#FA8888" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
       </div>
     </div>
   );

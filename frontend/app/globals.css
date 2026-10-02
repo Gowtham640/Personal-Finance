@@ -47,6 +47,12 @@ svg,
   -webkit-user-select: none;
 }
 
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
 button {
   cursor: pointer;
 }
@@ -72,6 +78,15 @@ button {
   background: linear-gradient(145deg, #38383a, #303032 70%, #353537);
   box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.35);
   transition: transform 180ms ease-out;
+}
+
+.finance-sheet .text-xs {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.finance-sheet .finance-field {
+  font-size: 1rem;
 }
 
 .finance-field {

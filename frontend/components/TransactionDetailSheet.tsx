@@ -40,8 +40,7 @@ export function TransactionDetailSheet({
   const [source, setSource, clearSource] = useSheetDraft(key + "source", transaction.source ?? "");
   const [description, setDescription, clearDescription] = useSheetDraft(key + "description", transaction.description ?? "");
   const [notes, setNotes, clearNotes] = useSheetDraft(key + "notes", transaction.notes ?? "");
-  const [balanceAfter, setBalanceAfter, clearBalance] = useSheetDraft(key + "balance", transaction.balance_after == null ? "" : String(transaction.balance_after));
-  const clearDraft = () => { clearEditing(); clearMerchant(); clearAmount(); clearType(); clearCategory(); clearDate(); clearSource(); clearDescription(); clearNotes(); clearBalance(); };
+  const clearDraft = () => { clearEditing(); clearMerchant(); clearAmount(); clearType(); clearCategory(); clearDate(); clearSource(); clearDescription(); clearNotes(); };
   const cancel = () => { clearDraft(); onClose(); };
   const suggestions = orderedCategorySuggestions(
     categoryFrequency(transactions),
@@ -61,7 +60,6 @@ export function TransactionDetailSheet({
       source: source.trim() || null,
       description: description.trim() || null,
       notes: notes.trim() || null,
-      balance_after: balanceAfter.trim() ? Number(balanceAfter) : null,
       updated_at: new Date().toISOString(),
       sync_status: "pending",
     };
@@ -85,7 +83,6 @@ export function TransactionDetailSheet({
       <label className="block text-xs text-white/75">Source<input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source" className="finance-field mt-1" /></label>
       <label className="block text-xs text-white/75">Description<input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" className="finance-field mt-1" /></label>
       <label className="block text-xs text-white/75">Note<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Note" className="finance-field mt-1 min-h-24" /></label>
-      <label className="block text-xs text-white/75">Balance after<input type="number" step="0.01" value={balanceAfter} onChange={(event) => setBalanceAfter(event.target.value)} placeholder="Balance after (optional)" className="finance-field mt-1" /></label>
       <div className="grid grid-cols-2 gap-2 pt-2"><button type="button" onClick={cancel} className="rounded-full bg-white/10 py-2.5 text-xs">Cancel</button><button type="button" onClick={() => void save()} className="flex items-center justify-center gap-2 rounded-full bg-[#1e1e1f] py-2.5 text-xs"><Check size={15} />Save changes</button></div>
     </div>
     {showCategories && <CategoryPickerSheet value={category} type={type} suggestions={suggestions} records={categoryRecords} onSelect={setCategory} onCreate={onCreateCategory} onRename={onRenameCategory} onDelete={onDeleteCategory} onClose={() => setShowCategories(false)} />}

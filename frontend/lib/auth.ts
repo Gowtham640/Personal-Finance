@@ -2,8 +2,12 @@ import { clearLocalData, getMeta, setMeta } from "./db";
 import { API_BASE, api } from "./api";
 import { User } from "./types";
 
+export async function getCachedUser() {
+  return getMeta<User | null>("user");
+}
+
 export async function checkSession(): Promise<User | null> {
-  const cached = await getMeta<User | null>("user");
+  const cached = await getCachedUser();
   if (!navigator.onLine) return cached ?? null;
   try {
     const response = await api.get("/api/me");

@@ -11,7 +11,7 @@ export function BottomNav() {
       {[{ href: "/", label: "Home", icon: House }, { href: "/analytics", label: "Analytics", icon: ChartNoAxesCombined }].map((item) => {
         const active = path === item.href;
         const Icon = item.icon;
-        return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`flex flex-1 flex-col items-center justify-center rounded-full px-3 text-[12px] font-semibold transition-all duration-200 active:scale-[0.96] ${active ? "bg-white/30 text-[#0A84FF]" : "text-black"}`}><Icon size={19} fill={active ? "currentColor" : "none"} /><span>{item.label}</span></Link>;
+        return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`flex flex-1 flex-col items-center justify-center rounded-full px-3 text-[12px] font-semibold text-black transition-all duration-200 active:scale-[0.96] ${active ? "bg-white/30" : ""}`}><Icon size={19} fill={active ? "currentColor" : "none"} /><span>{item.label}</span></Link>;
       })}
     </nav>
   );
