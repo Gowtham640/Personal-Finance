@@ -64,6 +64,17 @@ _CREDIT_SENDER_RE = re.compile(
 )
 _CREDIT_VPA_RE = re.compile(r"vpa\s*:\s*([^\s)]+)", re.I)
 
+# Deposit alerts include a credit and an available balance in one message.
+_DEPOSIT_AMOUNT_RE = re.compile(
+    r"amount\s+received\s*:\s*(?:₹|rs\.?\s*|inr\s+)?"
+    r"([\d,]*\d[\d,]*(?:\.\d{1,2})?)",
+    re.I,
+)
+_DEPOSIT_REFERENCE_RE = re.compile(
+    r"reference\s+details\s*:\s*(.+?)(?=\s+available\s+balance\b|$)",
+    re.I | re.S,
+)
+
 
 def normalize_expiry(expiry: str | datetime | None) -> datetime | None:
     """Convert Supabase token expiry values into UTC-aware datetimes."""
@@ -225,6 +236,28 @@ def is_hdfc_alert(message: dict[str, Any]) -> bool:
     return HDFC_SENDER.lower() in sender.lower()
 
 
+def classify_hdfc_message(message: dict[str, Any]) -> str | None:
+    """Classify supported HDFC templates before extracting their fields."""
+    text = _message_text(message)
+    lowered = text.lower()
+
+    # Deposit alerts are checked first because they contain both credit wording
+    # and an available-balance section.
+    if (
+        "available balance" in lowered
+        and "amount received" in lowered
+        and ("received a credit" in lowered or "deposit" in lowered)
+    ):
+        return "deposit"
+    if "available balance" in lowered:
+        return "balance"
+    if "debited" in lowered:
+        return "debit"
+    if "credited" in lowered:
+        return "credit"
+    return None
+
+
 def _transaction_date(text: str, message: dict[str, Any]) -> date:
     parsed = None
     match = _BODY_DATE_RE.search(text)
@@ -249,6 +282,21 @@ def _upi_or_fallback(text: str, message: dict[str, Any], amount: Decimal, transa
     match = _UPI_REF_RE.search(text)
     if match:
         return match.group(1).strip()
+    return fallback_unique_ref(message.get("id") or "", amount, transaction_date)
+
+
+def _deposit_reference_or_fallback(
+    text: str,
+    message: dict[str, Any],
+    amount: Decimal,
+    transaction_date: date,
+) -> str:
+    """Use the bank reference for deposits so repeated mail remains idempotent."""
+    match = _DEPOSIT_REFERENCE_RE.search(text)
+    if match:
+        reference = re.sub(r"\s+", " ", match.group(1)).strip().rstrip(".,;")
+        if reference:
+            return reference
     return fallback_unique_ref(message.get("id") or "", amount, transaction_date)
 
 
@@ -303,25 +351,20 @@ def fetch_emails_since(service, since_timestamp: datetime, user_id: str | None =
 
 
 def parse_finance_message(message: dict[str, Any]) -> dict[str, Any] | None:
-    """Parse HDFC debit and credit alert emails into transaction rows."""
+    """Parse HDFC debit, credit, and deposit alert emails into transaction rows."""
     text = _message_text(message)
-    lowered = text.lower()
     headers = _headers(message)
-
+    message_type = classify_hdfc_message(message)
     # Balance snapshots are handled separately and must not become transactions.
-    if "available balance" in lowered:
+    if message_type not in {"debit", "credit", "deposit"}:
         return None
 
-    is_debit = bool(re.search(r"\bdebited\b", lowered))
-    is_credit = bool(re.search(r"\bcredited\b", lowered))
-    if is_debit and is_credit:
-        is_debit = lowered.find("debited") < lowered.find("credited")
-        is_credit = not is_debit
-    if not (is_debit or is_credit):
-        return None
+    is_debit = message_type == "debit"
 
     amount_match = None
-    if is_debit:
+    if message_type == "deposit":
+        amount_match = _DEPOSIT_AMOUNT_RE.search(text)
+    elif is_debit:
         amount_match = re.search(
             r"(?:₹|rs\.?\s*|inr\s+)([\d,]*\d[\d,]*(?:\.\d{1,2})?)\s+(?:is\s+)?debited",
             text,
@@ -333,14 +376,18 @@ def parse_finance_message(message: dict[str, Any]) -> dict[str, Any] | None:
             text,
             re.I,
         )
-    if not amount_match:
+    if not amount_match and message_type != "deposit":
         amount_match = _AMOUNT_RE.search(text)
     amount = _parse_amount_group(amount_match.group(1) if amount_match else None)
     if amount is None:
         return None
     transaction_date = _transaction_date(text, message)
     email_timestamp = email_timestamp_from_message(message)
-    unique_ref = _upi_or_fallback(text, message, amount, transaction_date)
+    unique_ref = (
+        _deposit_reference_or_fallback(text, message, amount, transaction_date)
+        if message_type == "deposit"
+        else _upi_or_fallback(text, message, amount, transaction_date)
+    )
     merchant: str | None = None
 
     if is_debit:
@@ -381,7 +428,7 @@ def parse_finance_message(message: dict[str, Any]) -> dict[str, Any] | None:
 def parse_balance_message(message: dict[str, Any]) -> dict[str, Any] | None:
     """Parse HDFC available-balance emails into snapshot rows."""
     text = _message_text(message)
-    if "available balance" not in text.lower():
+    if classify_hdfc_message(message) not in {"balance", "deposit"}:
         return None
 
     amount_match = re.search(
@@ -418,6 +465,15 @@ def parse_failure_reason(message: dict[str, Any]) -> str:
     """Explain why an HDFC alert could not be turned into a row."""
     text = _message_text(message)
     lowered = text.lower()
+    message_type = classify_hdfc_message(message)
+    if message_type == "deposit":
+        if not _DEPOSIT_AMOUNT_RE.search(text):
+            return "deposit email missing received amount"
+        if not _DEPOSIT_REFERENCE_RE.search(text):
+            return "deposit email missing reference details"
+        if not re.search(r"available\s+balance", lowered):
+            return "deposit email missing available balance"
+        return "deposit email missing required fields"
     if "available balance" in lowered:
         if not _AMOUNT_RE.search(text):
             return "balance email missing amount"
