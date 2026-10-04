@@ -123,6 +123,7 @@ def _is_duplicate_error(exc: Exception) -> bool:
 def upsert_transaction(user_id: str, transaction: dict) -> bool:
     """Insert a transaction unless unique_ref already exists. Returns True when inserted."""
     unique_ref = transaction["unique_ref"]
+    # A divided original keeps this unique_ref as a deleted_at tombstone, so scrape must not recreate it.
     existing = (
         db.table("fin_transactions")
         .select("id")

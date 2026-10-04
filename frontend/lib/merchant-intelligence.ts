@@ -20,21 +20,36 @@ function normalize(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function displayLabel(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
+    .join(" ");
+}
+
 class TrieNode {
   children = new Map<string, TrieNode>();
-  values = new Set<string>();
+  values = new Map<string, { label: string; frequency: number }>();
 }
 
 export class MerchantTrie {
   private readonly root = new TrieNode();
 
-  add(value: string) {
-    const merchant = value.trim();
-    if (!merchant) return;
+  add(value: string, label?: string) {
+    const source = value.trim();
+    const merchant = (label ?? source).trim();
+    if (!source || !merchant) return;
+    const normalizedSource = normalize(source);
+    const normalizedMerchant = normalize(merchant);
     let node = this.root;
-    for (const character of normalize(merchant)) {
+    for (const character of normalizedSource) {
       node = node.children.get(character) ?? this.createChild(node, character);
-      node.values.add(merchant);
+      const existing = node.values.get(normalizedMerchant);
+      node.values.set(normalizedMerchant, {
+        label: existing?.label ?? merchant,
+        frequency: (existing?.frequency ?? 0) + 1,
+      });
     }
   }
 
@@ -46,12 +61,15 @@ export class MerchantTrie {
       node = node.children.get(character);
       if (!node) return [];
     }
-    return [...node.values]
+    return [...node.values.values()]
       .sort((left, right) => {
-        const leftExact = normalize(left) === normalizedPrefix ? 0 : 1;
-        const rightExact = normalize(right) === normalizedPrefix ? 0 : 1;
-        return leftExact - rightExact || left.localeCompare(right);
+        const leftExact = normalize(left.label) === normalizedPrefix ? 0 : 1;
+        const rightExact = normalize(right.label) === normalizedPrefix ? 0 : 1;
+        return leftExact - rightExact
+          || right.frequency - left.frequency
+          || left.label.localeCompare(right.label);
       })
+      .map((entry) => entry.label)
       .slice(0, limit);
   }
 
@@ -62,11 +80,23 @@ export class MerchantTrie {
   }
 }
 
-export function buildMerchantTrie(transactions: Transaction[]) {
+function indexMerchant(trie: MerchantTrie, value: string, label?: string) {
+  const merchant = (label ?? value).trim();
+  const source = value.trim();
+  if (!source || !merchant) return;
+  trie.add(source, merchant);
+  for (const word of source.split(/[\s/_-]+/)) {
+    if (word.length >= 2 && normalize(word) !== normalize(source)) trie.add(word, merchant);
+  }
+}
+
+export function buildMerchantTrie(transactions: Transaction[], learnedMerchants: readonly string[] = []) {
   const trie = new MerchantTrie();
-  Object.keys(commonMerchantCategories).forEach((merchant) => trie.add(merchant));
+  Object.keys(commonMerchantCategories).forEach((merchant) => indexMerchant(trie, merchant, displayLabel(merchant)));
+  learnedMerchants.forEach((merchant) => indexMerchant(trie, merchant, displayLabel(merchant)));
   transactions.forEach((transaction) => {
-    if (!transaction.excludedFromCashFlow && transaction.merchant) trie.add(transaction.merchant);
+    const merchant = transaction.merchant?.trim() || transaction.description?.trim();
+    if (merchant) indexMerchant(trie, merchant);
   });
   return trie;
 }

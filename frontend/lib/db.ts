@@ -131,12 +131,27 @@ export async function putTransaction(transaction: Transaction) {
   if (db) await (await db).put("transactions", transaction);
 }
 
-export async function replaceTransactionWithSplits(originalId: string, splits: Transaction[]) {
+export async function deleteTransactions(transactionIds: string[]) {
+  const db = getDB();
+  if (!db || transactionIds.length === 0) return;
+  const instance = await db;
+  const tx = instance.transaction("transactions", "readwrite");
+  await Promise.all(transactionIds.map((transactionId) => tx.store.delete(transactionId)));
+  await tx.done;
+}
+
+export async function replaceTransactionWithSplits(original: Transaction, splits: Transaction[]) {
   const db = getDB();
   if (!db) return;
   const instance = await db;
   const tx = instance.transaction("transactions", "readwrite");
-  await tx.store.delete(originalId);
+  const deletedAt = new Date().toISOString();
+  await tx.store.put({
+    ...original,
+    deleted_at: deletedAt,
+    updated_at: deletedAt,
+    sync_status: "pending",
+  });
   await Promise.all(splits.map((transaction) => tx.store.put(transaction)));
   await tx.done;
 }

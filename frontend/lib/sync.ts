@@ -8,6 +8,7 @@ import {
   putCategoryMapping,
   putMany,
   putSource,
+  putTransaction,
   setMeta,
 } from "./db";
 import { api } from "./api";
@@ -50,18 +51,31 @@ export async function syncData() {
   const localGroups = await listGroups(user.id);
   const localCategories = await listCategories(user.id);
   const localMappings = await listCategoryMappings(user.id);
+  const deletedTransactionIds = localTransactions
+    .filter((item) => item.user_id === user.id && item.sync_status === "pending" && item.deleted_at)
+    .map((item) => item.id);
   const state = await postJson<SyncResponse>("/api/sync", {
-    transactions: localTransactions.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
+    transactions: localTransactions.filter((item) =>
+      item.user_id === user.id && item.sync_status === "pending" && !item.deleted_at
+    ),
+    deleted_transaction_ids: deletedTransactionIds,
     sources: localSources.filter((item) => item.user_id === user.id && item.sync_status === "pending"),
     groups: localGroups.filter((item) => item.sync_status === "pending"),
     categories: localCategories.filter((item) => item.sync_status === "pending"),
     category_mappings: Object.fromEntries(localMappings.map((item) => [item.merchant_key, item.category])),
   });
+  const tombstonedIds = new Set(localTransactions.filter((item) => item.deleted_at).map((item) => item.id));
+  const tombstonedRefs = new Set(localTransactions.filter((item) => item.deleted_at).map((item) => item.unique_ref));
+  const isRestorable = (item: Transaction) => !tombstonedIds.has(item.id) && !tombstonedRefs.has(item.unique_ref);
   if (state) {
+    // Keep local tombstones after a successful backup so a later restore cannot revive a divided original.
+    await Promise.all(localTransactions
+      .filter((item) => deletedTransactionIds.includes(item.id))
+      .map((item) => putTransaction({ ...item, sync_status: "synced" })));
     const learnedMappings = Object.fromEntries(
       localMappings.map((item) => [item.merchant_key, item.category]),
     );
-    const categorizedTransactions = state.transactions.map((item) => {
+    const categorizedTransactions = state.transactions.filter(isRestorable).map((item) => {
       const category = item.category ?? categorySuggestion(
         item.merchant ?? "",
         Number(item.amount) || 0,
@@ -107,7 +121,7 @@ export async function syncData() {
     const pendingIds = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.id));
     const pendingRefs = new Set(localTransactions.filter((item) => item.sync_status === "pending").map((item) => item.unique_ref));
     await putMany("transactions", transactions
-      .filter((item) => !pendingIds.has(item.id) && !pendingRefs.has(item.unique_ref))
+      .filter((item) => !pendingIds.has(item.id) && !pendingRefs.has(item.unique_ref) && isRestorable(item))
       .map((item) => ({
         ...item,
         category: item.category ?? categorySuggestion(
@@ -136,7 +150,7 @@ async function ensureUpiSource(userId: string, history: import("./types").Balanc
   const snapshotTime = latestSnapshot ? recordTime(latestSnapshot.email_timestamp ?? latestSnapshot.snapshot_date) : 0;
   const transactions = await listTransactions();
   const latestImportedTransactionTime = transactions
-    .filter((transaction) => transaction.user_id === userId && transaction.email_timestamp)
+    .filter((transaction) => transaction.user_id === userId && !transaction.deleted_at && transaction.email_timestamp)
     .reduce((latest, transaction) => Math.max(latest, recordTime(transaction.email_timestamp!)), 0);
   const latestImportedRecordTime = Math.max(snapshotTime, latestImportedTransactionTime);
 
@@ -144,7 +158,12 @@ async function ensureUpiSource(userId: string, history: import("./types").Balanc
   if (existing && recordTime(existing.updated_at) >= latestImportedRecordTime) return;
 
   const projectedBalance = (latestSnapshot ? Number(latestSnapshot.balance) || 0 : 0) + transactions
-    .filter((transaction) => transaction.user_id === userId && !transaction.excludedFromCashFlow && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime)
+    .filter((transaction) =>
+      transaction.user_id === userId
+      && !transaction.deleted_at
+      && !transaction.excludedFromCashFlow
+      && recordTime(transaction.email_timestamp ?? transaction.transaction_date) > snapshotTime
+    )
     .reduce((balance, transaction) => {
       const amount = Number(transaction.amount) || 0;
       return balance + (transaction.type === "credit" ? amount : -amount);

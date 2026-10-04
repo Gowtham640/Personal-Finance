@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowUp, Ban, ChevronDown, FolderPlus, GitBranch, Plus, RefreshCw, Search, Undo2 } from "lucide-react";
+import { Ban, ChevronDown, FolderPlus, GitBranch, Pencil, RefreshCw, Search, Undo2 } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "../components/BottomNav";
 import { DivideTransactionSheet } from "../components/DivideTransactionSheet";
@@ -9,8 +10,10 @@ import { CategoryPickerSheet } from "../components/CategoryPickerSheet";
 import { AddTransactionSheet } from "../components/AddTransactionSheet";
 import { AuthGate } from "../components/AuthGate";
 import { ProfileMenu } from "../components/ProfileMenu";
+import { SourceIcon } from "../components/SourceCardsScroller";
 import { TransactionCard } from "../components/TransactionCard";
 import { TransactionDetailSheet } from "../components/TransactionDetailSheet";
+import { TransactionNoteSheet } from "../components/TransactionNoteSheet";
 import { useAuth } from "../hooks/useAuth";
 import { useCategories } from "../hooks/useCategories";
 import { useSources } from "../hooks/useSources";
@@ -38,7 +41,7 @@ function welcomeName(email: string) {
 const money = (value: number) => "₹ " + value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 export default function Home() {
-  const [sheet, setSheet] = useState<"add" | "category" | "detail" | "divide" | "group" | null>(null);
+  const [sheet, setSheet] = useState<"add" | "category" | "note" | "edit" | "divide" | "group" | null>(null);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -131,9 +134,9 @@ export default function Home() {
     const timestamp = Date.now();
     const splits = amounts.map((amount, index) => ({
       ...selected, id: crypto.randomUUID(), unique_ref: selected.unique_ref + "-split-" + timestamp + "-" + (index + 1),
-      amount, sync_status: "pending" as const, updated_at: new Date().toISOString(),
+      amount, deleted_at: null, sync_status: "pending" as const, updated_at: new Date().toISOString(),
     }));
-    await replaceTransactionWithSplits(selected.id, splits);
+    await replaceTransactionWithSplits(selected, splits);
     window.dispatchEvent(new Event("expense-data-changed"));
     setSelected(null);
     setSheet(null);
@@ -146,7 +149,7 @@ export default function Home() {
 
   return <AuthGate user={user} loading={loading}><main className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-[#111112] px-5 pb-28 pt-[calc(2rem+env(safe-area-inset-top))]">
     <header className="mb-5 flex items-center justify-between">
-      <h1 className="text-[18px] font-semibold">Welcome, {user?.display_name?.trim() || welcomeName(user?.email ?? "")}</h1>
+      <h1 className="text-[18px] font-semibold">Welcome, {user?.display_name?.trim().split(/\s+/)[0] || welcomeName(user?.email ?? "")}</h1>
       <ProfileMenu user={user} onChange={setUser} />
     </header>
 
@@ -158,7 +161,12 @@ export default function Home() {
           {ownedSources.map((source) => <button type="button" key={source.id} onClick={() => { setSourceId(source.id); setSourceOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-[15px] hover:bg-white/10">{source.source_name}</button>)}
         </div>}
       </div>
-      <div className="absolute inset-x-0 top-[70px] text-center text-[36px] font-semibold tracking-tight">{money(balance)}</div>
+      <span className="absolute right-4 top-4 flex items-center gap-1" aria-label={`Selected source: ${selectedSource?.source_name ?? "Overall"}`}>
+        {(selectedSource ? [selectedSource] : ownedSources).map((source) =>
+          <span key={source.id} className="flex h-9 w-9 items-center justify-center rounded-full bg-black/20 text-white/90"><SourceIcon type={source.icon_type} size={20} /></span>
+        )}
+      </span>
+      <div className="absolute inset-x-0 top-[62px] text-center text-[50px] font-semibold tracking-tight">{money(balance)}</div>
       <div className="absolute inset-x-4 bottom-3 grid grid-cols-2 gap-3">
         <span className="min-w-0 text-[14px]">Incoming:<strong className="block truncate text-[17px] text-(--green)">{money(incoming)}</strong></span>
         <span className="min-w-0 text-right text-[14px]">Outgoing:<strong className="block truncate text-[17px] text-(--red)">{money(outgoing)}</strong></span>
@@ -174,9 +182,9 @@ export default function Home() {
       <div>{datedTransactions.map(([date, items], index) => <section key={date} className={index < datedTransactions.length - 1 ? "mb-4" : ""}>
         <h3 className="mb-2 text-[12px] font-normal text-[#8e8e93]">{new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</h3>
         <div className="space-y-1">{items.map((item) => <TransactionCard key={item.id} transaction={item} iconKey={categoryIconKeys.get(`${item.type}:${item.category?.toLowerCase()}`)} groupColor={item.group_id ? groupColor(item.group_id) : undefined}
-          onDetail={() => { setSelected(item); openSheet("detail"); }}
+          onDetail={() => { setSelected(item); openSheet("note"); }}
           onCategory={() => { setSelected(item); openSheet("category"); }}
-          onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 168) })}
+          onLongPress={({ x, y }) => setLongPressMenu({ transaction: item, x: Math.min(x, document.documentElement.clientWidth - 232), y: Math.min(y, document.documentElement.clientHeight - 220) })}
         />)}</div>
       </section>)}</div>
       {visibleTransactions.length === 0 && <p className="py-12 text-center text-[16px] text-white/45">No transactions yet.</p>}
@@ -190,16 +198,18 @@ export default function Home() {
           <button key={action.target} type="button" onClick={() => { setSelected(null); openSheet(action.target); }} className="quick-action min-w-24 rounded-full bg-[#e5e5e5] px-4 py-2 text-center text-[15px] font-medium text-black shadow-lg" style={{ animationDelay: action.delay + "ms" }}>{action.label}</button>
         )}
       </div>}
-      <button type="button" aria-label={quickOpen ? "Close add menu" : "Open add menu"} aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)} className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e5e5e5] text-black shadow-lg transition-transform duration-200 active:scale-95">{quickOpen ? <ArrowUp size={24} /> : <Plus size={27} />}</button>
+      <button type="button" aria-label={quickOpen ? "Close add menu" : "Open add menu"} aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)} className="flex h-12 w-12 items-center justify-center rounded-full bg-[#444]/80 shadow-lg transition-transform duration-200 active:scale-95"><Image src="/plus-icon.svg" alt="" aria-hidden width={25} height={24} className={`h-6 w-[25px] transition-transform duration-200 ${quickOpen ? "rotate-45" : ""}`} /></button>
     </div>
 
     {sheet === "add" && <AddTransactionSheet sources={ownedSources} month={currentMonth} transactions={transactions} categoryMappings={categoryMappings} userId={user?.id ?? ""} onLearnCategory={learnCategory} onClose={() => setSheet(null)} categories={categories} onCreateCategory={createCategory} onRenameCategory={renameCategory} onDeleteCategory={removeCategory} />}
     {sheet === "category" && <CategoryPickerSheet value={selected?.category ?? null} type={selected?.type} suggestions={selectedSuggestions} records={categories} onSelect={selected ? editCategory : undefined} onCreate={createCategory} onRename={renameCategory} onDelete={removeCategory} onClose={() => setSheet(null)} />}
-    {sheet === "detail" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} categories={categories} onCreateCategory={createCategory} onRenameCategory={renameCategory} onDeleteCategory={removeCategory} />}
+    {sheet === "note" && selected && <TransactionNoteSheet transactionId={selected.id} initialNote={selected.notes} onSave={(notes) => { void update({ ...selected, notes, sync_status: "pending", updated_at: new Date().toISOString() }); setSelected(null); setSheet(null); }} onClose={() => setSheet(null)} />}
+    {sheet === "edit" && selected && <TransactionDetailSheet transaction={selected} transactions={transactions} categoryMappings={categoryMappings} onLearnCategory={learnCategory} onSave={update} onClose={() => setSheet(null)} categories={categories} onCreateCategory={createCategory} onRenameCategory={renameCategory} onDeleteCategory={removeCategory} startEditing />}
     {sheet === "divide" && selected && <DivideTransactionSheet transaction={selected} onSave={divideTransaction} onClose={() => setSheet(null)} />}
     {sheet === "group" && <GroupPickerSheet groups={groups} currentGroupId={selected?.group_id ?? null} onSelect={selected ? (groupId) => { void addToGroup(groupId); } : undefined} onCreate={createGroup} onRename={renameGroup} onDelete={removeGroup} onClose={() => { setSelected(null); setSheet(null); }} />}
 
     {longPressMenu && <><button type="button" aria-label="Close transaction actions" className="fixed inset-0 z-40" onClick={() => setLongPressMenu(null)} /><div className="fixed z-50 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#2c2c2e] p-1 shadow-2xl" style={{ left: longPressMenu.x, top: longPressMenu.y }}>
+      <button type="button" onClick={() => { setSelected(longPressMenu.transaction); openSheet("edit"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><Pencil size={16} />Edit transaction</button>
       <button type="button" onClick={async () => { const item = longPressMenu.transaction; await update({ ...item, excludedFromCashFlow: !item.excludedFromCashFlow, sync_status: "pending", updated_at: new Date().toISOString() }); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10">{longPressMenu.transaction.excludedFromCashFlow ? <Undo2 size={16} /> : <Ban size={16} />}{longPressMenu.transaction.excludedFromCashFlow ? "Include in cash flow" : "Exclude from cash flow"}</button>
       <button type="button" onClick={() => { setSelected(longPressMenu.transaction); openSheet("group"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><FolderPlus size={16} />Add to group</button>
       <button type="button" onClick={() => { setSelected(longPressMenu.transaction); openSheet("divide"); setLongPressMenu(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm hover:bg-white/10"><GitBranch size={16} />Divide transaction</button>

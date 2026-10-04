@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from google.oauth2 import id_token
@@ -66,6 +66,12 @@ class Settings:
 
 
 settings = Settings.from_env()
+TRUSTED_FRONTEND_ORIGINS = {
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://anassyed-homelab.tail3bc01f.ts.net",
+}
 db: Client = create_client(
     settings.supabase_url,
     settings.service_role_key,
@@ -74,12 +80,7 @@ db: Client = create_client(
 app = FastAPI(title="Finance Backend", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://anassyed-homelab.tail3bc01f.ts.net",
-    ],
+    allow_origins=sorted(TRUSTED_FRONTEND_ORIGINS),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -91,6 +92,12 @@ def current_user_id(session: str | None = Cookie(default=None, alias="finance_se
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return user_id
+
+
+def require_trusted_origin(request: Request) -> None:
+    """Reject authenticated browser mutations originating outside trusted frontends."""
+    if request.headers.get("origin") not in TRUSTED_FRONTEND_ORIGINS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Untrusted request origin")
 
 
 def state_fingerprint(value: str | None) -> str:
@@ -240,12 +247,23 @@ def serialize_category(row: dict) -> dict:
     return {**row, "sync_status": "synced"}
 
 
+def ensure_owned_resource_ids(table: str, ids: list[str], user_key: str, resource: str) -> None:
+    """Prevent service-role upserts from replacing another user's records."""
+    unique_ids = list(dict.fromkeys(ids))
+    if not unique_ids:
+        return
+    owners = db.table(table).select("id,user_id").in_("id", unique_ids).execute()
+    if any(row.get("user_id") != user_key for row in owners.data):
+        raise HTTPException(status_code=403, detail=f"{resource} belongs to another user")
+
+
 def current_sync_state(user_id: UUID) -> dict:
     user_key = str(user_id)
     transactions = (
         db.table("fin_transactions")
         .select("*")
         .eq("user_id", user_key)
+        .is_("deleted_at", "null")
         .order("transaction_date", desc=True)
         .limit(5000)
         .execute()
@@ -322,6 +340,7 @@ def transactions(
         db.table("fin_transactions")
         .select("*")
         .eq("user_id", str(user_id))
+        .is_("deleted_at", "null")
         .order("transaction_date", desc=True)
         .limit(limit)
         .execute()
@@ -330,13 +349,14 @@ def transactions(
 
 
 @app.post("/api/sync")
-def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
+def sync(
+    payload: SyncRequest,
+    user_id: UUID = Depends(current_user_id),
+    _: None = Depends(require_trusted_origin),
+):
     user_key = str(user_id)
     incoming_group_ids = [row["id"] for row in payload.groups]
-    if incoming_group_ids:
-        owners = db.table("fin_groups").select("id,user_id").in_("id", incoming_group_ids).execute()
-        if any(row["user_id"] != user_key for row in owners.data):
-            raise HTTPException(status_code=403, detail="Group belongs to another user")
+    ensure_owned_resource_ids("fin_groups", incoming_group_ids, user_key, "Group")
     group_rows = []
     for row in payload.groups:
         group_rows.append(
@@ -363,10 +383,7 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
         db.table("fin_transactions").update({"group_id": None}).eq("user_id", user_key).eq("group_id", group_id).execute()
 
     incoming_category_ids = [row["id"] for row in payload.categories]
-    if incoming_category_ids:
-        owners = db.table("fin_categories").select("id,user_id").in_("id", incoming_category_ids).execute()
-        if any(row["user_id"] != user_key for row in owners.data):
-            raise HTTPException(status_code=403, detail="Category belongs to another user")
+    ensure_owned_resource_ids("fin_categories", incoming_category_ids, user_key, "Category")
     category_rows = []
     for row in payload.categories:
         if row.get("type") not in ("credit", "debit") or not str(row.get("name", "")).strip():
@@ -383,6 +400,25 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
     if category_rows:
         db.table("fin_categories").upsert(category_rows, on_conflict="id").execute()
 
+    deleted_transaction_ids = [str(transaction_id) for transaction_id in payload.deleted_transaction_ids]
+    ensure_owned_resource_ids(
+        "fin_transactions",
+        deleted_transaction_ids,
+        user_key,
+        "Transaction",
+    )
+    if deleted_transaction_ids:
+        deleted_at = datetime.now(timezone.utc).isoformat()
+        (
+            db.table("fin_transactions")
+            .update({"deleted_at": deleted_at, "updated_at": deleted_at})
+            .eq("user_id", user_key)
+            .in_("id", deleted_transaction_ids)
+            .execute()
+        )
+
+    incoming_transaction_ids = [row["id"] for row in payload.transactions]
+    ensure_owned_resource_ids("fin_transactions", incoming_transaction_ids, user_key, "Transaction")
     transaction_rows = []
     for row in payload.transactions:
         transaction_rows.append(
@@ -409,6 +445,8 @@ def sync(payload: SyncRequest, user_id: UUID = Depends(current_user_id)):
     if transaction_rows:
         db.table("fin_transactions").upsert(transaction_rows, on_conflict="id").execute()
 
+    incoming_source_ids = [row["id"] for row in payload.sources]
+    ensure_owned_resource_ids("fin_sources", incoming_source_ids, user_key, "Source")
     source_rows = []
     for row in payload.sources:
         source_rows.append(
@@ -454,6 +492,9 @@ def balance_history(user_id: UUID = Depends(current_user_id)):
 
 
 @app.post("/api/reconnect")
-def reconnect(user_id: UUID = Depends(current_user_id)):
+def reconnect(
+    user_id: UUID = Depends(current_user_id),
+    _: None = Depends(require_trusted_origin),
+):
     db.table("fin_users").update({"gmail_tokens": None}).eq("id", str(user_id)).execute()
     return RedirectResponse("/auth/google", status_code=status.HTTP_303_SEE_OTHER)

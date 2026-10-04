@@ -18,6 +18,7 @@ export type Transaction = {
   group_id: string | null;
   email_timestamp?: string | null;
   excludedFromCashFlow?: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;

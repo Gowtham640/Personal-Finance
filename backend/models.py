@@ -40,6 +40,7 @@ class Transaction(BaseModel):
     group_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class Group(BaseModel):
@@ -64,6 +65,7 @@ class BalanceSnapshot(BaseModel):
 
 class SyncRequest(BaseModel):
     transactions: list[dict[str, Any]] = Field(default_factory=list)
+    deleted_transaction_ids: list[UUID] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     groups: list[dict[str, Any]] = Field(default_factory=list)
     categories: list[dict[str, Any]] = Field(default_factory=list)

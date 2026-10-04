@@ -1,7 +1,7 @@
 import { Check, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSheetDraft } from "../hooks/useSheetDraft";
-import { CategoryMapping, categoryFrequency, orderedCategorySuggestions } from "../lib/merchant-intelligence";
+import { buildMerchantTrie, CategoryMapping, categoryFrequency, normalizeMerchant, orderedCategorySuggestions } from "../lib/merchant-intelligence";
 import { CategoryRecord, Transaction, TransactionType } from "../lib/types";
 import { CategoryPickerSheet } from "./CategoryPickerSheet";
 import { Sheet } from "./Sheet";
@@ -17,6 +17,7 @@ export function TransactionDetailSheet({
   onCreateCategory,
   onRenameCategory,
   onDeleteCategory,
+  startEditing = false,
 }: {
   transaction: Transaction;
   transactions: Transaction[];
@@ -28,9 +29,10 @@ export function TransactionDetailSheet({
   onCreateCategory: (name: string, type: TransactionType, iconKey: string) => Promise<boolean>;
   onRenameCategory: (category: CategoryRecord, name: string, iconKey: string) => Promise<boolean>;
   onDeleteCategory: (category: CategoryRecord) => Promise<void>;
+  startEditing?: boolean;
 }) {
   const key = "edit-transaction-" + transaction.id + "-";
-  const [editing, setEditing, clearEditing] = useSheetDraft(key + "mode", false);
+  const [editing, setEditing, clearEditing] = useSheetDraft(key + "mode", startEditing);
   const [showCategories, setShowCategories] = useState(false);
   const [merchant, setMerchant, clearMerchant] = useSheetDraft(key + "merchant", transaction.merchant ?? "");
   const [amount, setAmount, clearAmount] = useSheetDraft(key + "amount", String(transaction.amount));
@@ -38,10 +40,20 @@ export function TransactionDetailSheet({
   const [category, setCategory, clearCategory] = useSheetDraft(key + "category", transaction.category);
   const [date, setDate, clearDate] = useSheetDraft(key + "date", transaction.transaction_date.slice(0, 10));
   const [source, setSource, clearSource] = useSheetDraft(key + "source", transaction.source ?? "");
-  const [description, setDescription, clearDescription] = useSheetDraft(key + "description", transaction.description ?? "");
   const [notes, setNotes, clearNotes] = useSheetDraft(key + "notes", transaction.notes ?? "");
-  const clearDraft = () => { clearEditing(); clearMerchant(); clearAmount(); clearType(); clearCategory(); clearDate(); clearSource(); clearDescription(); clearNotes(); };
+  const clearDraft = () => { clearEditing(); clearMerchant(); clearAmount(); clearType(); clearCategory(); clearDate(); clearSource(); clearNotes(); };
   const cancel = () => { clearDraft(); onClose(); };
+  useEffect(() => {
+    if (startEditing) setEditing(true);
+  }, [setEditing, startEditing]);
+  const merchantTrie = useMemo(
+    () => buildMerchantTrie(transactions, Object.keys(categoryMappings)),
+    [categoryMappings, transactions],
+  );
+  const merchantSuggestions = useMemo(
+    () => merchantTrie.suggest(merchant).filter((suggestion) => normalizeMerchant(suggestion) !== normalizeMerchant(merchant)),
+    [merchant, merchantTrie],
+  );
   const suggestions = orderedCategorySuggestions(
     categoryFrequency(transactions),
     categoryMappings[merchant.trim().toLowerCase()] ?? null,
@@ -58,7 +70,6 @@ export function TransactionDetailSheet({
       category,
       transaction_date: new Date(`${date}T12:00:00`).toISOString(),
       source: source.trim() || null,
-      description: description.trim() || null,
       notes: notes.trim() || null,
       updated_at: new Date().toISOString(),
       sync_status: "pending",
@@ -75,13 +86,15 @@ export function TransactionDetailSheet({
   }
   return <Sheet title="Edit Transaction" onClose={onClose} onCancel={cancel}>
     <div className="space-y-4">
-      <label className="block text-xs text-white/75">Merchant / Description<input value={merchant} onChange={(event) => setMerchant(event.target.value)} placeholder="Merchant or counterparty" className="finance-field mt-1" /></label>
+      <label className="block text-xs text-white/75">Merchant<input value={merchant} onChange={(event) => setMerchant(event.target.value)} placeholder="Merchant or counterparty" className="finance-field mt-1" /></label>
+      {merchantSuggestions.length > 0 && <div className="max-h-28 overflow-y-auto rounded-lg bg-black/20 p-1">{merchantSuggestions.map((suggestion) =>
+        <button type="button" key={suggestion} onClick={() => setMerchant(suggestion)} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-white/10">{suggestion}</button>
+      )}</div>}
       <label className="block text-xs text-white/75">Amount<input type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" className="finance-field mt-1" /></label>
       <div className="grid grid-cols-2 rounded-full bg-black/20 p-1">{(["credit", "debit"] as const).map((option) => <button key={option} onClick={() => setType(option)} className={`rounded-full py-2 text-sm capitalize ${type === option ? "bg-white/10 text-white" : "text-[#8E8E93]"}`}>{option}</button>)}</div>
       <label className="block text-xs text-white/75">Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="finance-field mt-1" /></label>
       <label className="block text-xs text-white/75">Category<button type="button" onClick={() => setShowCategories(true)} className="finance-field mt-1 text-left">{category || "Choose category"}</button></label>
       <label className="block text-xs text-white/75">Source<input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source" className="finance-field mt-1" /></label>
-      <label className="block text-xs text-white/75">Description<input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" className="finance-field mt-1" /></label>
       <label className="block text-xs text-white/75">Note<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Note" className="finance-field mt-1 min-h-24" /></label>
       <div className="grid grid-cols-2 gap-2 pt-2"><button type="button" onClick={cancel} className="rounded-full bg-white/10 py-2.5 text-xs">Cancel</button><button type="button" onClick={() => void save()} className="flex items-center justify-center gap-2 rounded-full bg-[#1e1e1f] py-2.5 text-xs"><Check size={15} />Save changes</button></div>
     </div>

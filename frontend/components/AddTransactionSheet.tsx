@@ -39,7 +39,10 @@ export function AddTransactionSheet({
   const [showCategories, setShowCategories] = useState(false);
   const [error, setError] = useState("");
   const source = sources.find((item) => item.id === sourceId);
-  const merchantTrie = useMemo(() => buildMerchantTrie(transactions), [transactions]);
+  const merchantTrie = useMemo(
+    () => buildMerchantTrie(transactions, Object.keys(categoryMappings)),
+    [categoryMappings, transactions],
+  );
   const merchantSuggestions = useMemo(
     () => merchantTrie.suggest(merchant).filter((suggestion) => normalizeMerchant(suggestion) !== normalizeMerchant(merchant)),
     [merchant, merchantTrie],

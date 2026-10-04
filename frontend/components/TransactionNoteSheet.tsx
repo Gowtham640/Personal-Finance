@@ -5,15 +5,17 @@ import { useSheetDraft } from "../hooks/useSheetDraft";
 import { Sheet } from "./Sheet";
 
 export function TransactionNoteSheet({
+  transactionId,
   initialNote,
   onSave,
   onClose,
 }: {
+  transactionId: string;
   initialNote: string | null;
   onSave: (note: string) => void;
   onClose: () => void;
 }) {
-  const [note, setNote, clearNote] = useSheetDraft("transaction-note", initialNote ?? "");
+  const [note, setNote, clearNote] = useSheetDraft(`transaction-note-${transactionId}`, initialNote ?? "");
 
   return (
     <Sheet title="Transaction Note" onClose={onClose} onCancel={() => { clearNote(); onClose(); }}>
